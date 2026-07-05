@@ -1,0 +1,1834 @@
+<!--
+  ============================================================
+  SG-004A Testtool
+  Gemaakt door : Bert Schuite
+  Versie       : v1.4
+  Datum        : 2026-07-05
+  ------------------------------------------------------------
+  Modbus-testtool voor de FNIRSI SG-004A via Web Serial
+  (Chrome/Edge). Bevat meet-, register- en diagnostiekfuncties.
+  ============================================================
+-->
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Web Serial Modbus test tool for the FNIRSI SG-004A with measurements, function generator, trend display and diagnostics.">
+<meta name="theme-color" content="#0e1014">
+<title>SG-004A Testtool v1.4 — Bert Schuite</title>
+<style>
+  :root{
+    --bg:#0e1014; --panel:#161a21; --panel2:#1c222b; --panel3:#252d38; --line:#2a313c;
+    --text:#e6e9ef; --muted:#8b94a3; --amber:#ffc83d;
+    --cyan:#3fd0c9; --ok:#57c98a; --fail:#ff5d5d; --radius:12px; --shadow:0 12px 32px rgba(0,0,0,.18);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:radial-gradient(circle at 50% -20%,#242a35 0,var(--bg) 42%);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.45}
+  .mono{font-family:ui-monospace,"Cascadia Mono","Consolas","SF Mono",monospace}
+  .wrap{max-width:1840px;margin:0 auto;padding:14px 20px 20px}
+
+  header{display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap}
+  header h1{font-size:20px;margin:0;letter-spacing:.025em;font-weight:650}
+  header .model{color:var(--amber);font-weight:700}
+  header .sub{color:var(--muted);font-size:12px}
+  header .ver{font-size:11px;font-weight:700;letter-spacing:.04em;color:#1a1407;
+    background:var(--amber);border-radius:10px;padding:2px 9px}
+  header .author{color:var(--muted);font-size:12px;margin-left:auto}
+  header .author b{color:var(--text);font-weight:600}
+  .credit{margin-top:14px;padding-top:10px;border-top:1px solid var(--line);
+    font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+  .credit b{color:var(--text);font-weight:600}
+  .credit .ver{color:var(--amber);font-weight:700}
+
+  .bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;background:rgba(22,26,33,.94);
+    border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;margin-bottom:12px;box-shadow:var(--shadow);
+    position:sticky;top:8px;z-index:20;backdrop-filter:blur(12px)}
+  .bar label{font-size:11px;color:var(--muted);margin-right:6px}
+  input,select{background:#11151b;color:var(--text);border:1px solid var(--line);
+    border-radius:7px;padding:7px 9px;font-size:13px;min-height:34px}
+  input:focus,select:focus{outline:2px solid var(--amber);outline-offset:-1px;border-color:var(--amber)}
+  input.kks{width:100%}
+  .toggle{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;color:var(--muted)}
+  .toggle input{accent-color:var(--amber)}
+
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);
+    background:linear-gradient(180deg,var(--panel3),var(--panel2));color:var(--text);padding:8px 14px;transition:.15s ease}
+  button:hover:not(:disabled){border-color:#667080;transform:translateY(-1px)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:linear-gradient(180deg,#ffd45f,var(--amber));color:#1a1407;border-color:var(--amber);font-weight:750}
+  button.small{padding:6px 10px;font-size:12px}
+  button.rec{font-weight:600}
+  button.rec.active{background:var(--fail);border-color:var(--fail);color:#240808}
+
+  .status{display:inline-flex;align-items:center;gap:7px;font-size:12px;margin-left:auto}
+  #langToggle{margin-left:0!important}.fw{margin-left:0!important}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--fail);box-shadow:0 0 8px var(--fail)}
+  .status.on .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  .card{background:linear-gradient(180deg,rgba(28,34,43,.72),rgba(22,26,33,.96));border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+  .card h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 12px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .card h2 .r{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}
+
+  .tests{display:flex;flex-direction:column;gap:2px;transition:min-height .15s ease}
+
+  /* accorderon */
+  .type-sel-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px}
+  .type-btn{cursor:pointer;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:600;
+    border:1px solid var(--line);background:var(--panel2);color:var(--text)}
+  .type-btn:hover{background:var(--panel3)}
+  .type-btn.active{background:var(--amber);color:#111;border-color:var(--amber)}
+  .type-btn:focus-visible,.sub-type-btn:focus-visible,.test-btn-sm:focus-visible,.tab-btn:focus-visible,
+  button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  .type-sub-box{display:flex;flex-wrap:wrap;gap:5px;padding:9px;border:1px solid var(--line);
+    border-radius:8px;background:rgba(10,13,18,.42);min-height:48px}
+  .sub-type-row{display:flex;flex-wrap:wrap;gap:3px;width:100%;margin-bottom:6px}
+  .sub-type-btn{cursor:pointer;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;
+    border:1px solid var(--line);background:var(--panel2);color:var(--text)}
+  .sub-type-btn:hover{background:var(--panel3)}
+  .sub-type-btn.active{background:var(--amber);color:#111;border-color:var(--amber)}
+  .sub-type-outer{display:flex;flex-wrap:wrap;gap:4px;width:100%}
+  .test-btn-sm{cursor:pointer;padding:5px 10px;border-radius:5px;font-size:12px;border:1px solid transparent;
+    display:inline-flex;align-items:center;gap:4px;background:var(--panel2);line-height:1.3}
+  .test-btn-sm:hover{background:var(--panel3);border-color:var(--line)}
+  .test-btn-sm.active{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+  .test-btn-sm .swatch{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:3px}
+  .test-btn-sm small{color:var(--muted);font-size:11px;margin-left:3px}
+  .sub-label{font-size:11px;color:var(--muted);width:100%;margin:2px 0;font-weight:600}
+  .tc-wrap{display:inline-flex;align-items:center;gap:4px;padding:4px 6px;background:var(--panel2);
+    border-radius:5px;border:1px solid var(--line);font-size:12px}
+  .tc-wrap .tc-label{font-weight:600;font-size:11px;color:var(--muted)}
+  .tc-wrap select{font-size:11px;padding:2px 4px}
+  .tc-wrap button{font-size:11px;padding:2px 8px;cursor:pointer}
+  .setting-item{cursor:help;font-size:11px;color:var(--muted);padding:3px 6px;border-radius:4px;
+    font-style:italic;width:100%}
+  .setting-item:hover{background:var(--panel2)}
+
+  /* instellingen-raster */
+  .set-grid{display:grid;grid-template-columns:max-content 1fr;gap:12px 16px;align-items:center;max-width:460px}
+  .set-grid label{color:var(--muted);font-size:13px}
+  .set-grid input,.set-grid select{width:100%}
+
+  /* uitgangsbesturing + functiegenerator */
+  .out-ctrl{margin-top:10px;padding:10px;background:rgba(10,13,18,.42);border:1px solid var(--line);border-radius:9px}
+  .oc-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .oc-row label{color:var(--muted);font-size:12px}
+  .oc-row input{width:96px}
+  .oc-unit{color:var(--muted);font-size:12px}
+  .fg{margin-top:12px;padding:12px;background:rgba(10,13,18,.32);border:1px solid var(--line);border-radius:9px}
+  .fg-head{font-weight:700;font-size:13px;margin-bottom:8px}
+  .fg-state{font-weight:400;color:var(--muted);font-size:11px;margin-left:6px}
+  .fg-state.on{color:var(--amber);font-weight:700}
+  .fg-grid{display:grid;grid-template-columns:max-content minmax(90px,1fr) max-content minmax(90px,1fr) max-content minmax(90px,1fr);gap:8px 10px;align-items:center}
+  .fg-grid label{color:var(--muted);font-size:12px}
+  .fg-grid select,.fg-grid input{width:100%}
+  .fg-grid #fgWave{grid-column:2 / -1}
+  .fg-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .cal{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--muted)}
+  .cal .rawv{flex:1;font-family:ui-monospace,Consolas,monospace}
+  .cal .scl{width:90px}
+
+  .screen{background:linear-gradient(145deg,#07130f,#0a1813);border:1px solid #234638;border-radius:10px;padding:14px 18px;margin:10px 0;box-shadow:inset 0 0 28px rgba(0,0,0,.24)}
+  .screen .label{font-size:11px;color:#5b7d6f;letter-spacing:.08em;text-transform:uppercase}
+  .screen .read{font-family:ui-monospace,monospace;font-size:46px;font-weight:700;color:var(--amber);
+    text-shadow:0 0 14px rgba(255,200,61,.35);margin-top:4px}
+  .screen .read small{font-size:22px;color:#c9a23a;margin-left:8px}
+  .screen .verdict{font-size:13px;margin-top:8px;height:20px}
+  .verdict.ok{color:var(--ok)} .verdict.fail{color:var(--fail)} .verdict.none{color:#5b7d6f}
+  .sync-warn{font-size:10px;color:var(--amber);min-height:14px;margin-top:2px}
+
+  canvas{width:100%;height:210px;display:block;background:#0a0d12;border:1px solid var(--line);border-radius:9px}
+  .meta-row{display:grid;grid-template-columns:78px 1fr;align-items:center;gap:10px;margin-bottom:10px}
+  .meta-row label{color:var(--muted);font-size:12px;text-align:left}
+  .rec-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px}
+  .samples{color:var(--muted);font-size:12px;margin-left:auto}
+
+  /* registrertabel */
+  .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+  .reg-card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .reg-card .r-addr{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+  .reg-card .r-name{font-size:12px;color:var(--text);font-weight:600;margin:2px 0 4px}
+  .reg-card .r-val{font-size:16px;color:var(--cyan);font-weight:700}
+  .reg-card .r-val small{font-size:11px;color:var(--muted);font-weight:400;margin-left:8px}
+
+  /* diagnostiek */
+  .diag{margin-top:16px}
+  .diag-rows{display:flex;flex-wrap:wrap;gap:14px}
+  .diag-block{flex:1;min-width:260px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px}
+  .diag-block .t{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+  .diag-block .row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+  .diag-block input.addr{width:74px} .diag-block input.val{width:90px} .diag-block input.raw{flex:1;min-width:140px}
+  .diag-out{font-size:12px;color:var(--cyan);min-height:18px;word-break:break-all}
+
+  .monitor{background:#0a0d12;border:1px solid var(--line);border-radius:8px;height:200px;overflow:auto;
+    padding:8px 10px;font-size:12px;margin-top:10px}
+  .monitor .tx{color:var(--amber)} .monitor .rx{color:var(--cyan)} .monitor .info{color:var(--muted)} .monitor .err{color:var(--fail)}
+
+  .logbox{background:#0a0d12;border:1px solid var(--line);border-radius:8px;height:120px;overflow:auto;
+    padding:8px 10px;font-size:12px;margin-top:16px}
+  .logbox .ln{color:var(--muted)} .logbox .ln b{color:var(--text);font-weight:400}
+  .warn{color:var(--amber)}
+  .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+.tabs{display:flex;gap:4px;margin:0;padding:3px;background:#11151b;border:1px solid var(--line);border-radius:9px;width:max-content;max-width:100%}
+.tab-btn{font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 17px;background:transparent;border-color:transparent;border-radius:7px;color:var(--muted)}
+.tab-btn.active{background:var(--panel3);border-color:#3a4350;color:var(--amber);box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+.fw{font-size:11px;color:var(--muted);margin-left:auto}
+.measure-grid{display:grid;grid-template-columns:minmax(420px,.8fr) minmax(900px,1.7fr);gap:14px;align-items:start}
+.measure-channel{min-width:0}
+.output-layout{display:grid;grid-template-columns:minmax(340px,.82fr) minmax(560px,1.18fr);gap:14px;align-items:start}
+.output-measure,.output-controls{min-width:0}
+.output-controls .out-ctrl{margin-top:0}
+.output-controls .fg{margin-top:10px}
+.measure-input{border-top:3px solid var(--cyan)}
+.measure-output{border-top:3px solid var(--amber)}
+.measure-input .section-title{color:var(--cyan)}
+.measure-output .section-title{color:var(--amber)}
+.measure-input .section-title:before,.measure-output .section-title:before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
+.measure-input .screen{border-color:rgba(63,208,201,.42);background:linear-gradient(145deg,#071312,#091a18)}
+.measure-output .screen{border-color:rgba(255,200,61,.42);background:linear-gradient(145deg,#151207,#1a1609)}
+.measure-input .screen .read{color:var(--cyan);text-shadow:0 0 14px rgba(63,208,201,.32)}
+.measure-input .screen .read small{color:#65aaa6}
+.measure-output .screen .read{color:var(--amber)}
+.measure-input .type-btn.active,.measure-input .sub-type-btn.active{background:var(--cyan);border-color:var(--cyan);color:#071312}
+.measure-output .type-btn.active,.measure-output .sub-type-btn.active{background:var(--amber);border-color:var(--amber);color:#1a1407}
+.measure-input .test-btn-sm.active{border-color:var(--cyan);box-shadow:inset 0 0 0 1px var(--cyan)}
+.measure-output .test-btn-sm.active{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+.section-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;font-weight:650;display:flex;align-items:center;gap:8px}
+.section-title .section-sub{font-size:10px;font-weight:400;letter-spacing:0;text-transform:none}
+.lower-grid{display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:14px;margin-top:14px;align-items:stretch}
+.trend-card{min-width:0}
+.trend-card .rec-row{margin-top:12px}
+.data-card .hint{margin-top:auto}
+.output-controls .fg>.hint{display:none}
+.wrap>div.hint{display:none}
+@media (max-width:1380px){
+  .measure-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .output-layout{grid-template-columns:1fr}
+  .fg-grid{grid-template-columns:max-content 1fr max-content 1fr}
+  .fg-grid #fgWave{grid-column:2/-1}
+}
+@media (max-width:760px){
+  .wrap{padding:12px}
+  .measure-grid,.lower-grid{grid-template-columns:1fr}
+  .screen .read{font-size:38px}
+  .tabs{overflow-x:auto}
+  .tab-btn{padding:8px 12px;white-space:nowrap}
+  .fg-grid{grid-template-columns:max-content 1fr}
+  .fg-grid select{grid-column:2}
+  .bar{position:static}
+  .meta-row{grid-template-columns:1fr;gap:4px}
+  .tests{min-height:0!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="model">SG-004A</span> Testtool</h1>
+    <span class="ver">v1.4</span>
+    <span class="sub" data-i18n="app_sub">Modbus via Web Serial — met diagnostiek</span>
+    <span class="author"><span data-i18n="app_author">Gemaakt door</span> <b>Bert Schuite</b></span>
+  </header>
+
+  <div class="bar">
+    <label><span data-i18n="interval">Interval</span> <input type="number" id="pollInterval" value="500" min="50" max="60000" step="50" style="width:68px;height:20px;text-align:center"> <span data-i18n="ms">ms</span></label>
+    <label class="toggle"><input type="checkbox" id="sim"> <span data-i18n="sim">Simulatie</span></label>
+    <button class="primary" id="connect" data-i18n="connect">Verbinden</button>
+    <div class="tabs" role="tablist" aria-label="Hoofdweergave">
+      <button type="button" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-measure" data-tab="measure" data-i18n="tab_measure">Meten</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-regs" data-tab="regs" data-i18n="tab_regs">Registers</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-diag" data-tab="diag" data-i18n="tab_diag">Diagnostiek</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings" data-i18n="tab_settings">Instellingen</button>
+    </div>
+    <span class="status" id="status" role="status" aria-live="polite"><span class="dot"></span><span id="statusText" data-i18n="not_connected">niet verbonden</span></span>
+    <span class="fw" id="fwDisplay"></span>
+    <button class="small" id="langToggle" title="NL/EN" style="margin-left:auto;font-weight:700">NL</button>
+  </div>
+
+  <div class="tab-pane active" id="tab-measure" role="tabpanel">
+    <div class="measure-grid">
+      <div class="card measure-channel measure-input">
+        <h2 class="section-title"><span data-i18n="in_title">Ingang</span> <span class="section-sub" data-i18n="in_sub">— test kiezen</span></h2>
+        <div class="tests" id="inTests"></div>
+        <div class="screen">
+          <div class="label" id="inName" data-i18n="no_test">geen test</div>
+          <div class="read" id="inReadout">––.–––<small id="inUnit"></small></div>
+          <div class="verdict none" id="inVerdict" aria-live="polite" data-i18n="sel_in">selecteer ingang</div>
+          <div class="sync-warn" id="inSyncWarn"></div>
+          <div class="cal"><span class="rawv" id="inRaw"></span><label><span data-i18n="scale">schaal</span> &times;</label><input id="inScale" type="number" step="any" class="scl" disabled></div>
+        </div>
+      </div>
+      <div class="card measure-channel measure-output">
+        <h2 class="section-title"><span data-i18n="out_title">Uitgang</span> <span class="section-sub" data-i18n="out_sub">— test kiezen</span></h2>
+        <div class="output-layout">
+          <div class="output-measure">
+            <div class="tests" id="outTests"></div>
+            <div class="screen">
+              <div class="label" id="outName" data-i18n="no_test">geen test</div>
+              <div class="read" id="outReadout">––.–––<small id="outUnit"></small></div>
+              <div class="verdict none" id="outVerdict" aria-live="polite" data-i18n="sel_out">selecteer uitgang</div>
+              <div class="sync-warn" id="outSyncWarn"></div>
+              <div class="cal"><span class="rawv" id="outRaw"></span><label><span data-i18n="scale">schaal</span> &times;</label><input id="outScale" type="number" step="any" class="scl" disabled></div>
+            </div>
+          </div>
+          <div class="output-controls">
+        <div class="out-ctrl">
+          <div class="oc-row">
+            <label data-i18n="stuurwaarde">Stuurwaarde</label>
+            <input id="outSet" type="number" step="any" data-i18n-placeholder="value_ph" placeholder="waarde" disabled>
+            <span class="oc-unit" id="outSetUnit"></span>
+            <button class="small" id="outSend" data-i18n="verzend" disabled>Verzend</button>
+          </div>
+        </div>
+        <div class="fg">
+          <div class="fg-head"><span data-i18n="fg_head">Functiegenerator</span> <span class="fg-state" id="fgState"><span data-i18n="fg_off">uit</span></span> <span title="Het setpoint wordt per meetinterval geschreven. Blind schrijven wacht niet direct op bevestiging; vóór een ingangsmeting wordt de seriële lijn opgeschoond." style="float:right;color:var(--muted);cursor:help">ⓘ</span></div>
+          <div class="fg-grid">
+            <label data-i18n="fg_wave">Golfvorm</label>
+            <select id="fgWave">
+              <option value="sine" data-i18n="sine">Sinus</option>
+              <option value="triangle" data-i18n="triangle">Driehoek</option>
+              <option value="sawtooth" data-i18n="sawtooth">Zaagtand</option>
+              <option value="square" data-i18n="square">Blok</option>
+              <option value="ramp" data-i18n="ramp">Ramp</option>
+              <option value="staircase" data-i18n="staircase">Trap</option>
+            </select>
+            <label data-i18n="fg_min">Min</label><input id="fgMin" type="number" step="any" value="4">
+            <label data-i18n="fg_max">Max</label><input id="fgMax" type="number" step="any" value="20">
+            <label data-i18n="fg_period">Periode (s)</label><input id="fgPeriod" type="number" step="any" value="10">
+            <label data-i18n="fg_cycles">Cycli</label><input id="fgCycles" type="number" step="1" value="0" data-i18n-title="fg_continuous" title="0 = continu">
+            <label data-i18n="fg_steps">Punten/cyclus</label><input id="fgSteps" type="number" min="2" step="1" value="5">
+            <label data-i18n="fg_dir">Richting</label><select id="fgDir"><option value="up" data-i18n="up">Op</option><option value="down" data-i18n="down">Neer</option></select>
+          </div>
+          <div class="fg-row">
+            <button class="primary" id="fgStart" data-i18n="fg_start" disabled>&#9654; Start</button>
+            <button id="fgStop" data-i18n="fg_stop" disabled>&#9632; Stop</button>
+            <label class="toggle" title="Schrijf zonder direct op antwoord te wachten; ingangsmetingen blijven actief"><input type="checkbox" id="fgBlind"> <span data-i18n="fg_blind">Blind schrijven</span></label>
+            <span class="oc-unit" id="fgInfo"></span>
+          </div>
+          <div class="hint" data-i18n="fg_hint">De setpoint wordt elk meetinterval naar 0x9C46 geschreven. Bij 500&nbsp;ms haal je ~2 punten/s; kies een periode van minstens ~10&times; het interval voor een vloeiende vorm. Sinus/driehoek/zaagtand worden bij lage updatesnelheid trapsgewijs.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+    <div class="lower-grid">
+      <div class="card data-card">
+        <h2 class="section-title" data-i18n="test_data">Testgegevens</h2>
+        <div class="meta-row"><label for="kks" data-i18n="kks_label">KKS-naam</label><input class="kks" id="kks" data-i18n-placeholder="kks_ph" placeholder="bv. 10HAD10CT001"></div>
+        <div class="meta-row"><label for="operator" data-i18n="operator_label">Operator</label><input class="kks" id="operator" data-i18n-placeholder="operator_ph" placeholder="naam"></div>
+        <div class="meta-row"><label for="notes" data-i18n="notes_label">Opmerking</label><input class="kks" id="notes" data-i18n-placeholder="notes_ph" placeholder="optioneel"></div>
+      </div>
+      <div class="card trend-card">
+        <h2 class="section-title" data-i18n="trend">Trend</h2>
+        <canvas id="trend" width="600" height="210" role="img" aria-label="Trendgrafiek van de gemeten ingangs- en uitgangswaarden"></canvas>
+        <div class="rec-row">
+          <button class="rec" id="record" data-i18n="rec_start" disabled>● Start opname</button>
+          <button id="save" data-i18n="save_csv" disabled>Opslaan als CSV</button>
+          <button id="outOff" data-i18n="out_off" disabled>Output uit</button>
+          <span class="samples" id="samples">0 <span data-i18n="samples">samples</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-diag" role="tabpanel" hidden>
+    <h2 style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:8px" data-i18n="diag_title">Diagnostiek
+      <span style="margin-left:auto"><button class="small" id="probe" data-i18n="probe" disabled>Verbindingstest</button></span></h2>
+    <div class="diag-rows">
+        <div class="diag-block">
+          <div class="t" data-i18n="reg_read">Register lezen</div>
+          <div class="row">
+            <label class="mono">0x</label><input class="addr mono" id="rAddr" value="9C44">
+            <select id="rType"><option value="float" data-i18n="float">float</option><option value="u16">uint16</option></select>
+            <button class="small" id="rBtn" data-i18n="read_btn" disabled>Lees</button>
+          </div>
+          <div class="diag-out mono" id="rOut"></div>
+        </div>
+        <div class="diag-block">
+          <div class="t" data-i18n="reg_write">Register schrijven</div>
+          <div class="row">
+            <label class="mono">0x</label><input class="addr mono" id="wAddr" value="9C42">
+            <select id="wType"><option value="u16">uint16</option><option value="float" data-i18n="float">float</option></select>
+            <input class="val" id="wVal" data-i18n-placeholder="value_ph" placeholder="waarde">
+            <button class="small" id="wBtn" data-i18n="write_btn" disabled>Schrijf</button>
+          </div>
+          <div class="diag-out mono" id="wOut"></div>
+        </div>
+        <div class="diag-block">
+          <div class="t" data-i18n="raw_frame">Ruw frame versturen</div>
+          <div class="row">
+            <input class="raw mono" id="rawHex" placeholder="01 64 9C 44 00 02">
+            <label class="toggle" style="font-size:11px"><input type="checkbox" id="rawCrc" checked> <span data-i18n="crc_label">CRC</span></label>
+            <button class="small" id="rawBtn" data-i18n="send_btn" disabled>Stuur</button>
+          </div>
+          <div class="diag-out mono" id="rawOut"></div>
+        </div>
+      </div>
+    <h2 style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px;font-weight:600;display:flex;align-items:center;gap:8px" data-i18n="monitor">Seriële monitor <span style="margin-left:auto"><button class="small" id="clearMon" data-i18n="clear_mon">Wis monitor</button></span></h2>
+    <div class="monitor mono" id="monitor" role="log" aria-label="Seriële monitor" style="height:360px;border-color:var(--line)"></div>
+    <h2 style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px;font-weight:600;display:flex;align-items:center;gap:8px" data-i18n="logger">Logboek <span style="margin-left:auto"><button class="small" id="clearLog" data-i18n="clear_log">Wis log</button></span></h2>
+    <div class="logbox mono" id="log" role="log" aria-label="Logboek" style="height:240px;margin-top:0"></div>
+  </div>
+
+  <div class="tab-pane" id="tab-settings" role="tabpanel" hidden>
+    <div class="card">
+      <h2 data-i18n="settings_title">Verbindingsinstellingen</h2>
+      <div class="set-grid">
+        <label data-i18n="baud">Baud rate</label>
+        <select id="baud"><option>9600</option><option>19200</option><option>38400</option>
+          <option>57600</option><option selected>115200</option></select>
+        <label data-i18n="slave_id">Slave-ID</label>
+        <input id="slave" value="1">
+      </div>
+      <div class="hint" data-i18n="settings_hint">
+        Stel baud rate en Slave-ID in vóór het verbinden. Het SG-004A-protocol gebruikt
+        vast functiecodes 0x64–0x67 en ABCD-floatvolgorde.
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-regs" role="tabpanel" hidden>
+    <div class="card">
+      <h2 data-i18n="regs_title">Registerwaarden <span class="r" id="regsStatus" style="font-size:11px;text-transform:none;letter-spacing:0"></span></h2>
+      <div class="reg-grid" id="regGrid"></div>
+    </div>
+  </div>
+
+  <div class="hint" data-i18n="main_hint">
+    Open dit bestand in <b>Chrome</b> of <b>Edge</b>. Bij "Verbinden" (simulatie uit) kies je de poort van de SG-004A.
+    Gebruik bij problemen de seriële monitor onder Diagnostiek. CSV-bestandsnaam: <span class="mono">KKS_testtype_datum_tijd.csv</span>.
+  </div>
+  <div class="credit">
+    <span><span data-i18n="app_author">Gemaakt door</span> <b>Bert Schuite</b></span>
+    <span class="ver">v1.4</span>
+    <span>2026-07-05</span>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* SG-004A Testtool — gemaakt door Bert Schuite — v1.4 — 2026-07-05 */
+const APP_AUTHOR="Bert Schuite", APP_VERSION="1.4", APP_DATE="2026-07-05";
+
+const L10N={_lang:"nl",_lsKey:"sg004a_lang",
+  setLang(l){this._lang=l;try{localStorage.setItem(this._lsKey,l)}catch(e){}},
+  getLang(){try{const s=localStorage.getItem(this._lsKey);if(s==="nl"||s==="en")return s}catch(e){}return"nl"},
+  t(k,...args){let s=this[k];if(Array.isArray(s))s=s[this._lang==="en"?1:0];if(s===undefined)s=k;
+    return args.length?s.replace(/{}/g,()=>args.shift()):s},
+  init(){this._lang=this.getLang();},
+  // ─── UI labels ───
+  app_title:["SG-004A Testtool — Bert Schuite","SG-004A Testtool — Bert Schuite"],
+  app_sub:["Modbus via Web Serial — met diagnostiek","Modbus over Web Serial — with diagnostics"],
+  app_author:["Gemaakt door","Created by"],
+  // toolbar
+  interval:["Interval","Interval"],
+  ms:["ms","ms"],
+  sim:["Simulatie","Simulation"],
+  connect:["Verbinden","Connect"],
+  disconnect:["Verbreken","Disconnect"],
+  not_connected:["niet verbonden","not connected"],
+  connected:["verbonden","connected"],
+  port_offline:["poort offline — wacht tot hij terugkomt…","port offline — waiting for reconnection…"],
+  port_reopened:["poort automatisch heropend","port automatically reopened"],
+  reopen_fail:["heropenen mislukte:","reopen failed:"],
+  conn_fail:["Verbinden mislukt:","Connection failed:"],
+  conn_closed:["Verbinding gesloten.","Connection closed."],
+  // tabs
+  tab_measure:["Meten","Measure"],
+  tab_regs:["Registers","Registers"],
+  tab_diag:["Diagnostiek","Diagnostics"],
+  tab_settings:["Instellingen","Settings"],
+  // measure tab
+  in_title:["Ingang","Input"],
+  in_sub:["— test kiezen","— select test"],
+  out_title:["Uitgang","Output"],
+  out_sub:["— test kiezen","— select test"],
+  no_test:["geen test","no test"],
+  sel_in:["selecteer ingang","select input"],
+  sel_out:["selecteer uitgang","select output"],
+  scale:["schaal","scale"],
+  stuurwaarde:["Stuurwaarde","Setpoint"],
+  value_ph:["waarde","value"],
+  verzend:["Verzend","Send"],
+  // functiegenerator
+  fg_head:["Functiegenerator","Function generator"],
+  fg_off:["uit","off"],
+  fg_on:["aan","on"],
+  fg_wave:["Golfvorm","Waveform"],
+  sine:["Sinus","Sine"],
+  triangle:["Driehoek","Triangle"],
+  sawtooth:["Zaagtand","Sawtooth"],
+  square:["Blok","Square"],
+  ramp:["Ramp","Ramp"],
+  staircase:["Trap","Staircase"],
+  fg_min:["Min","Min"],
+  fg_max:["Max","Max"],
+  fg_period:["Periode (s)","Period (s)"],
+  fg_cycles:["Cycli","Cycles"],
+  fg_continuous:["0 = continu","0 = continuous"],
+  fg_steps:["Punten/cyclus","Points/cycle"],
+  fg_dir:["Richting","Direction"],
+  up:["Op","Up"],
+  down:["Neer","Down"],
+  fg_start:["Start","Start"],
+  fg_stop:["Stop","Stop"],
+  fg_blind:["Blind schrijven","Blind write"],
+  fg_hint:["De setpoint wordt elk meetinterval naar 0x9C46 geschreven. Blind schrijven wacht niet direct op bevestiging; vóór een ingangsmeting wordt de seriële lijn veilig opgeschoond. Kies een periode van minstens ~10× het interval voor een vloeiende vorm.","The setpoint is written to 0x9C46 each poll interval. Blind write does not wait immediately for confirmation; before an input measurement the serial line is safely cleared. Choose a period of at least ~10× the interval for a smooth waveform."],
+  fg_started:["Functiegenerator gestart:","Function generator started:"],
+  fg_stopped:["Functiegenerator gestopt","Function generator stopped"],
+  fg_manual:["handmatig","manual"],
+  fg_done:["klaar","done"],
+  fg_conn_lost:["verbinding weg","connection lost"],
+  fg_output:["output uit","output off"],
+  fg_other_test:["andere test gekozen","other test selected"],
+  // testgegevens
+  test_data:["Testgegevens","Test data"],
+  kks_label:["KKS-naam","KKS tag"],
+  kks_ph:["bv. 10HAD10CT001","e.g. 10HAD10CT001"],
+  operator_label:["Operator","Operator"],
+  operator_ph:["naam","name"],
+  notes_label:["Opmerking","Notes"],
+  notes_ph:["optioneel","optional"],
+  trend:["Trend","Trend"],
+  rec_start:["Start opname","Start recording"],
+  rec_stop:["Stop opname","Stop recording"],
+  save_csv:["Opslaan als CSV","Save as CSV"],
+  out_off:["Output uit","Output off"],
+  out_on:["Output aan","Output on"],
+  samples:["samples","samples"],
+  // verdicts
+  v_no_range:["geen bereik","no range"],
+  v_in_range:["binnen bereik","in range"],
+  v_out_range:["buiten bereik","out of range"],
+  // diag tab
+  diag_title:["Diagnostiek","Diagnostics"],
+  probe:["Verbindingstest","Connection test"],
+  reg_read:["Register lezen","Register read"],
+  reg_write:["Register schrijven","Register write"],
+  raw_frame:["Ruw frame versturen","Send raw frame"],
+  read_btn:["Lees","Read"],
+  write_btn:["Schrijf","Write"],
+  send_btn:["Stuur","Send"],
+  float:["float","float"],
+  crc_label:["CRC","CRC"],
+  written_float:["float geschreven","float written"],
+  written_u16:["uint16 geschreven","uint16 written"],
+  no_bytes:["geen bytes","no bytes"],
+  reply_empty:["(leeg)","(empty)"],
+  reply:["antwoord:","reply:"],
+  error:["fout:","error:"],
+  // monitor
+  monitor:["Seriële monitor","Serial monitor"],
+  clear_mon:["Wis monitor","Clear monitor"],
+  logger:["Logboek","Log"],
+  clear_log:["Wis log","Clear log"],
+  // regs tab
+  regs_title:["Registerwaarden","Register values"],
+  // settings tab
+  settings_title:["Verbindingsinstellingen","Connection settings"],
+  baud:["Baud rate","Baud rate"],
+  slave_id:["Slave-ID","Slave-ID"],
+  fc_mode:["Functiecodes","Function codes"],
+  fc_custom:["Aangepast 0x64–0x67","Custom 0x64–0x67"],
+  fc_std:["Standaard 0x03/06/10","Standard 0x03/06/10"],
+  word_order:["Float-volgorde","Float order"],
+  settings_hint:["Stel baud rate en Slave-ID in vóór het verbinden. Het SG-004A-protocol gebruikt vast functiecodes 0x64–0x67 en ABCD-floatvolgorde.","Set baud rate and Slave ID before connecting. The SG-004A protocol uses fixed function codes 0x64–0x67 and ABCD float order."],
+  // hints
+  main_hint:["Open dit bestand in Chrome of Edge. Bij \"Verbinden\" (simulatie uit) kies je de poort van de SG-004A. Gebruik bij problemen de seriële monitor onder Diagnostiek. CSV-bestandsnaam: KKS_testtype_datum_tijd.csv.","Open this file in Chrome or Edge. Click \"Connect\" (simulation off) and select the SG-004A port. Use the serial monitor under Diagnostics if problems occur. CSV filename: KKS_testtype_date_time.csv."],
+  // serial monitor / log
+  tx_tag:["TX","TX"],
+  rx_tag:["RX","RX"],
+  timeout:["⏱ timeout ({}ms)","⏱ timeout ({}ms)"],
+  fc_mismatch:["FC-mismatch: req 0x{} resp 0x{} — overgeslagen","FC-mismatch: req 0x{} resp 0x{} — skipped"],
+  again_fc:["Nogmaals FC-mismatch: resp 0x{}","FC-mismatch again: resp 0x{}"],
+  short_reply:["↑ Antwoord te kort ({} B)","↑ Reply too short ({} B)"],
+  crc_err:["↑ CRC-fout (verwacht {})","↑ CRC error (expected {})"],
+  slave_mismatch:["↑ Slave-ID mismatch: req 0x{} resp 0x{}","↑ Slave-ID mismatch: req 0x{} resp 0x{}"],
+  stale_dropped:["↑ weggegooid stale frame:","↑ discarded stale frame:"],
+  // probe
+  probe_ok:["Verbindingstest OK — firmware v{}.{} (0x{})","Connection test OK — firmware v{}.{} (0x{})"],
+  probe_fail:["Verbindingstest mislukte: {}","Connection test failed: {}"],
+  // firmware
+  fw_unknown:["?","?"],
+  // read/write
+  read_fail:["Ingang uitlezen mislukte: {}","Input read failed: {}"],
+  out_read_fail:["Uitgang uitlezen mislukte: {}","Output read failed: {}"],
+  // signal type
+  sig_write:["Signaaltype instellen mislukte: {}","Signal type setting failed: {}"],
+  sig_readback:["Waarschuwing: input-type niet overgenomen door apparaat (0x{})","Warning: input type not applied by device (0x{})"],
+  sig_sub_warn:["Waarschuwing: input sub-byte wijkt af: kreeg 0x{}, verwacht 0x{}","Warning: input sub-byte differs: got 0x{}, expected 0x{}"],
+  out_sig_warn:["Waarschuwing: output-type niet overgenomen door apparaat (0x{})","Warning: output type not applied by device (0x{})"],
+  out_sub_warn:["Waarschuwing: output sub-byte wijkt af: kreeg 0x{}, verwacht 0x{}","Warning: output sub-byte differs: got 0x{}, expected 0x{}"],
+  // scale
+  scale_adj:["Ingangsschaal aangepast: {} ×{}","Input scale adjusted: {} ×{}"],
+  // output
+  out_sent:["Stuurwaarde verzonden: {} {} → 0x9C46","Setpoint sent: {} {} → 0x9C46"],
+  out_send_fail:["Stuurwaarde verzenden mislukte: {}","Setpoint send failed: {}"],
+  out_disabled:["Output uitgeschakeld.","Output disabled."],
+  out_enabled:["Output ingeschakeld.","Output enabled."],
+  out_disable_fail:["Output uitschakelen mislukte: {}","Output disable failed: {}"],
+  // recording
+  recording:["Opname gestart voor KKS '{}'.","Recording started for KKS '{}'."],
+  recording_stopped:["Opname gestopt ({} samples).","Recording stopped ({} samples)."],
+  no_data:["Geen meetdata om op te slaan.","No measurement data to save."],
+  saved:["Opgeslagen: {}","Saved: {}"],
+  save_fail:["Opslaan mislukte: {}","Save failed: {}"],
+  kks_empty_warn:["KKS-naam is leeg. Toch opslaan?","KKS tag is empty. Save anyway?"],
+  // sync
+  sig_mismatch:["⚠ signaal 0x{}","⚠ signal 0x{}"],
+  sub_mismatch:["⚠ sub 0x{} (verw 0x{})","⚠ sub 0x{} (expected 0x{})"],
+  // combined read
+  combined_fail:["Gecombineerd uitlezen niet ondersteund ({}), val terug op sequentieel","Combined read not supported ({}), falling back to sequential"],
+  // select test
+  sel_side:["Selecteer {}: {} (sig={}, sub={})","Select {}: {} (sig={}, sub={})"],
+  sel_out_type:["  → output-type schrijven: sig={}, sub={}","  → write output type: sig={}, sub={}"],
+  setting_help:["Instelling in de meter — wijzig via Register tab","Meter setting — change via Register tab"],
+  sel_in_type:["  → input-type schrijven: sig={}, sub={}","  → write input type: sig={}, sub={}"],
+  sel_readback:["  → readback output-signaal = 0x{} (verwacht: 0x{})","  → readback output signal = 0x{} (expected: 0x{})"],
+  sel_active:["{} actief: {}","{} active: {}"],
+  // device follow
+  follow:["Volg apparaat: {} → {}","Device follow: {} → {}"],
+  // CSV report
+  csv_report:["SG-004A Testrapport","SG-004A Test Report"],
+  csv_tool:["Gemaakt met SG-004A Testtool v{} — {}","Created with SG-004A Testtool v{} — {}"],
+  csv_kks:["KKS-naam","KKS tag"],
+  csv_input:["Ingang","Input"],
+  csv_output:["Uitgang","Output"],
+  csv_operator:["Operator","Operator"],
+  csv_notes:["Opmerking","Notes"],
+  csv_startdate:["Startdatum","Start date"],
+  csv_starttime:["Starttijd","Start time"],
+  csv_samples:["Aantal samples","Sample count"],
+  csv_min:["Min","Min"],
+  csv_max:["Max","Max"],
+  csv_avg:["Gemiddelde","Average"],
+  csv_t_sec:["t_sec","t_sec"],
+  csv_timestamp:["tijdstip","timestamp"],
+  csv_in_val:["in_waarde","in_value"],
+  csv_in_range:["in_binnen_bereik","in_range"],
+  csv_out_val:["out_waarde","out_value"],
+  csv_out_range:["uit_binnen_bereik","out_range"],
+  csv_yes:["ja","yes"],
+  csv_no:["NEE","NO"],
+  // test names
+  t_ma_loop_in:["4–20 mA stroomlus","4–20 mA current loop"],
+  d_ma_loop_in:["signaal transmitter/PLC inlezen","read transmitter/PLC signal"],
+  t_loop_24v:["24V loopvoeding","24V loop power"],
+  d_loop_24v:["voed transmitter + meet lusstroom","power transmitter + measure loop current"],
+  t_voltage_in:["0–10 V spanning","0–10 V voltage"],
+  d_voltage_in:["spanningssignaal inlezen","read voltage signal"],
+  t_tc_s_mv:["TC S — mV","TC S — mV"],
+  d_tc_s_mv:["Pt10%Rh-Pt","Pt10%Rh-Pt"],
+  t_tc_b_mv:["TC B — mV","TC B — mV"],
+  d_tc_b_mv:["Pt30%Rh-Pt6%Rh","Pt30%Rh-Pt6%Rh"],
+  t_tc_e_mv:["TC E — mV","TC E — mV"],
+  d_tc_e_mv:["NiCr-CuNi","NiCr-CuNi"],
+  t_tc_k_mv:["TC K — mV","TC K — mV"],
+  d_tc_k_mv:["NiCr-NiAl","NiCr-NiAl"],
+  t_tc_r_mv:["TC R — mV","TC R — mV"],
+  d_tc_r_mv:["Pt13%Rh-Pt","Pt13%Rh-Pt"],
+  t_tc_j_mv:["TC J — mV","TC J — mV"],
+  d_tc_j_mv:["Fe-CuNi","Fe-CuNi"],
+  t_tc_t_mv:["TC T — mV","TC T — mV"],
+  d_tc_t_mv:["Cu-CuNi","Cu-CuNi"],
+  t_tc_n_mv:["TC N — mV","TC N — mV"],
+  d_tc_n_mv:["NiCrSi-NiSi","NiCrSi-NiSi"],
+  t_tc_s_c:["TC S — °C","TC S — °C"],
+  d_tc_s_c:["0…1768°C","0…1768°C"],
+  t_tc_b_c:["TC B — °C","TC B — °C"],
+  d_tc_b_c:["0…1820°C","0…1820°C"],
+  t_tc_e_c:["TC E — °C","TC E — °C"],
+  d_tc_e_c:["-100…1000°C","-100…1000°C"],
+  t_tc_k_c:["TC K — °C","TC K — °C"],
+  d_tc_k_c:["-200…1372°C","-200…1372°C"],
+  t_tc_r_c:["TC R — °C","TC R — °C"],
+  d_tc_r_c:["0…1768°C","0…1768°C"],
+  t_tc_j_c:["TC J — °C","TC J — °C"],
+  d_tc_j_c:["-100…1200°C","-100…1200°C"],
+  t_tc_t_c:["TC T — °C","TC T — °C"],
+  d_tc_t_c:["-100…400°C","-100…400°C"],
+  t_tc_n_c:["TC N — °C","TC N — °C"],
+  d_tc_n_c:["-200…1300°C","-200…1300°C"],
+  t_rtd_pt100:["Pt100 °C/°F","Pt100 °C/°F"],
+  d_rtd_pt100:["RTD Pt100 temperatuur","RTD Pt100 temperature"],
+  t_rtd_cu50:["Cu50 °C/°F","Cu50 °C/°F"],
+  d_rtd_cu50:["RTD Cu50 temperatuur","RTD Cu50 temperature"],
+  t_rtd_res_ohm:["RES (Ω)","RES (Ω)"],
+  d_rtd_res_ohm:["weerstandsmodus 0…400Ω","resistance mode 0…400Ω"],
+  t_rtd_pt1000_ohm:["Pt1000 (Ω)","Pt1000 (Ω)"],
+  d_rtd_pt1000_ohm:["Pt1000 temperatuur (CVD)","Pt1000 temperature (CVD)"],
+  t_freq_in:["Frequentie / puls","Frequency / pulse"],
+  d_freq_in:["0–9999 Hz meten","0–9999 Hz measurement"],
+  t_ma_loop_out:["4–20 mA genereren","4–20 mA generate"],
+  d_ma_loop_out:["stroomsignaal uitsturen","output current signal"],
+  t_voltage_out:["0–10 V genereren","0–10 V generate"],
+  d_voltage_out:["spanning uitsturen","output voltage"],
+  t_mv_out:["mV / TC simuleren","mV / TC simulate"],
+  d_mv_out:["0–110 mV uitgang","0–110 mV output"],
+  t_res_out:["Weerstand simuleren","Resistance simulate"],
+  d_res_out:["0–4000 Ω weerstand genereren","0–4000 Ω resistance output"],
+  t_freq_out:["Frequentie genereren","Frequency output"],
+  d_freq_out:["puls/Hz uitgang 0–9999 Hz","pulse/Hz output 0–9999 Hz"],
+  // ─── nieuwe input tests ───
+  t_tc_r_wr:["TC R — WRe25 (WR)","TC R — WRe25 (WR)"],
+  d_tc_r_wr:["WRe25 wolfram-rhenium (0…2400°C)","WRe25 tungsten-rhenium (0…2400°C)"],
+  t_tc_j_wr:["TC J — WRe26 (WR)","TC J — WRe26 (WR)"],
+  d_tc_j_wr:["WRe26 wolfram-rhenium (0…2400°C)","WRe26 tungsten-rhenium (0…2400°C)"],
+  t_mv_110_in:["±110 mV ingang","±110 mV input"],
+  d_mv_110_in:["±110 mV ingangsbereik","±110 mV input range"],
+  t_freq_pulse:["Puls-ingang","Pulse input"],
+  d_freq_pulse:["puls/Hz 0–200 kHz","pulse/Hz 0–200 kHz"],
+  t_freq_pwm:["PWM-ingang","PWM input"],
+  d_freq_pwm:["pulsbreedtemodulatie 0–9999 Hz","PWM 0–9999 Hz"],
+  t_freq_speed:["Toerental-ingang","Speed input"],
+  d_freq_speed:["toerental/frequentie 0–9999 Hz","speed/frequency 0–9999 Hz"],
+  t_freq_counter:["Teller-ingang","Counter input"],
+  d_freq_counter:["pulstellermodus 0–999.999","pulse counter mode 0–999,999"],
+  // ─── nieuwe output tests ───
+  t_xmt_out:["XMT (transmitter)","XMT (transmitter)"],
+  d_xmt_out:["0–24 mA transmitteruitgang","0–24 mA transmitter output"],
+  t_mv_110_out:["±110 mV uitgang","±110 mV output"],
+  d_mv_110_out:["±110 mV uitgangsbereik","±110 mV output range"],
+  t_tc_s_out:["TC S — simulatie","TC S — simulation"],
+  d_tc_s_out:["TC S simulatie (0–20 mV)","TC S simulation (0–20 mV)"],
+  t_tc_b_out:["TC B — simulatie","TC B — simulation"],
+  d_tc_b_out:["TC B simulatie (0–14 mV)","TC B simulation (0–14 mV)"],
+  t_tc_e_out:["TC E — simulatie","TC E — simulation"],
+  d_tc_e_out:["TC E simulatie (0–80 mV)","TC E simulation (0–80 mV)"],
+  t_tc_k_out:["TC K — simulatie","TC K — simulation"],
+  d_tc_k_out:["TC K simulatie (0–55 mV)","TC K simulation (0–55 mV)"],
+  t_tc_r_out:["TC R — simulatie","TC R — simulation"],
+  d_tc_r_out:["TC R simulatie (0–21 mV)","TC R simulation (0–21 mV)"],
+  t_tc_j_out:["TC J — simulatie","TC J — simulation"],
+  d_tc_j_out:["TC J simulatie (0–70 mV)","TC J simulation (0–70 mV)"],
+  t_tc_t_out:["TC T — simulatie","TC T — simulation"],
+  d_tc_t_out:["TC T simulatie (0–22 mV)","TC T simulation (0–22 mV)"],
+  t_tc_n_out:["TC N — simulatie","TC N — simulation"],
+  d_tc_n_out:["TC N simulatie (0–50 mV)","TC N simulation (0–50 mV)"],
+  t_wr_r_out:["WRe25 — simulatie","WRe25 — simulation"],
+  d_wr_r_out:["WRe25 simulatie (0–24 mV)","WRe25 simulation (0–24 mV)"],
+  t_wr_j_out:["WRe26 — simulatie","WRe26 — simulation"],
+  d_wr_j_out:["WRe26 simulatie (0–24 mV)","WRe26 simulation (0–24 mV)"],
+  t_freq_pulse_out:["Puls-uitgang","Pulse output"],
+  d_freq_pulse_out:["puls 0–200 kHz","pulse 0–200 kHz"],
+  t_freq_pwm_out:["PWM-uitgang","PWM output"],
+  d_freq_pwm_out:["pulsbreedtemodulatie 0–9999 Hz","PWM 0–9999 Hz"],
+  t_freq_speed_out:["Toerental-uitgang","Speed output"],
+  d_freq_speed_out:["toerental/frequentie 0–9999 Hz","speed/frequency 0–9999 Hz"],
+  t_freq_qpulse_out:["Q-Puls-uitgang","Q-Pulse output"],
+  d_freq_qpulse_out:["Q-puls 0–200 kHz","Q-pulse 0–200 kHz"],
+  t_v24_out:["24V uitgang","24V output"],
+  d_v24_out:["24V uitgangsspanning (0–28 V)","24V output voltage (0–28 V)"],
+  t_res_pt100_out:["Pt100 simulatie","Pt100 simulation"],
+  d_res_pt100_out:["Pt100 weerstandssimulatie (0–400 Ω)","Pt100 resistance simulation (0–400 Ω)"],
+  t_res_cu_out:["Cu-simulatie","Cu simulation"],
+  d_res_cu_out:["Cu weerstandssimulatie (0–400 Ω)","Cu resistance simulation (0–400 Ω)"],
+  t_res_pt1000_out:["Pt1000 simulatie","Pt1000 simulation"],
+  d_res_pt1000_out:["Pt1000 weerstandssimulatie (0–4000 Ω)","Pt1000 resistance simulation (0–4000 Ω)"],
+  // TC/RTD dropdown
+  tc_wr_tile:["Thermokoppel / WR","Thermocouple / WR"],
+  rtd_tile:["RTD / Weerstand","RTD / Resistance"],
+  tc_out_tile:["mV / TC simuleren","mV / TC simulate"],
+  rtd_out_tile:["Weerstand simuleren","Resistance simulate"],
+  freq_in_tile:["Frequentie / puls","Frequency / pulse"],
+  freq_out_tile:["Frequentie","Frequency"],
+  choose_btn:["Kies","Select"],
+  // signal labels
+  sig_CURRENT:["CURRENT","CURRENT"],
+  sig_VOLTAGE:["VOLTAGE","VOLTAGE"],
+  sig_FREQUENCY:["FREQUENCY","FREQUENCY"],
+  sig_MILLIVOLT:["MILLIVOLT","MILLIVOLT"],
+  sig_RESISTANCE:["RESISTANCE","RESISTANCE"],
+  sig_XMT:["XMT","XMT"],
+  sig_V24:["24V","24V"],
+  sig_RESISTANCE_OUT:["RESISTANCE_OUT","RESISTANCE_OUT"],
+  // connected
+  connected_sim:["verbonden (SIMULATIE)","connected (SIMULATION)"],
+  connected_com:["verbonden (COM)","connected (COM)"],
+  // auto reconnect
+  reconnect_armed:["Verbonden ({}). Automatisch herverbinden staat aan.","Connected ({}). Auto-reconnect is enabled."],
+  // init log
+  init_log:["SG-004A Testtool v{} — gemaakt door {} ({}).","SG-004A Testtool v{} — created by {} ({})."],
+  ready:["Klaar. Verbind met het apparaat of laat simulatie aan staan.","Ready. Connect to the device or enable simulation."],
+  no_serial:["Web Serial niet gevonden — gebruik Chrome/Edge; hier werkt alleen simulatie.","Web Serial not found — use Chrome/Edge; only simulation works here."],
+};
+L10N.init();
+const tr=(k,...args)=>L10N.t(k,...args);
+
+function applyLang(){
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el=>{
+    el.placeholder=tr(el.dataset.i18nPlaceholder);});
+  document.querySelectorAll("[data-i18n-title]").forEach(el=>{
+    el.title=tr(el.dataset.i18nTitle);});
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const k=el.dataset.i18n;
+    if(el.tagName==="OPTION"){el.textContent=tr(k);return;}
+    if(k==="main_hint"||k==="fg_hint"||k==="settings_hint"){el.innerHTML=tr(k);return;}
+    if(el.childElementCount===0||(el.childElementCount===1&&el.children[0].tagName==="SMALL")){
+      el.textContent=tr(k);return;}
+    // behoud child elementen, update alleen textnodes
+    const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,null,false);
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    if(nodes.length){nodes[0].textContent=tr(k);for(let i=1;i<nodes.length;i++)nodes[i].textContent="";}
+  });
+  document.title=tr("app_title")+" v"+APP_VERSION;
+  $("langToggle").textContent=L10N._lang==="nl"?"NL":"EN";
+}
+// langToggle onclick wordt verderop gezet nadat $() is gedefinieerd
+
+const REG_FIRMWARE=0x9C41, REG_INPUT_SIGNAL=0x9C42, REG_OUTPUT_SIGNAL=0x9C43,
+      REG_INPUT_VALUE=0x9C44, REG_OUTPUT_VALUE=0x9C46, REG_OUTPUT_SWITCH=0x9C48;
+const FC={R_U16:0x64,W_U16:0x65,R_F:0x66,W_F:0x67, STD_READ:0x03,STD_W1:0x06,STD_WN:0x10};
+const SIG={CURRENT:0x01,VOLTAGE:0x02,FREQUENCY:0x03,MILLIVOLT:0x04,RESISTANCE:0x05};
+// output type codes verschillen van input (bv FREQ=0x04 ipv 0x03)
+const SIG_OUT={CURRENT:0x01,VOLTAGE:0x02,XMT:0x03,FREQUENCY:0x04,MILLIVOLT:0x05,V24:0x06,RESISTANCE:0x07};
+
+const TC=(t,m)=>(t<<4)|m; // TC_type=1..8, mode=1(mV) 2(°C) 3(WR)
+// Pt1000 Ω→°C (IEC 60751 Callendar-Van Dusen)
+function pt1000ToC(R){
+  const R0=1000,A=3.9083e-3,B=-5.775e-7,C=-4.183e-12,r=R/R0;
+  let T=(-A+Math.sqrt(A*A-4*B*(1-r)))/(2*B);
+  if(T<0)for(let i=0,n=T;i<20;i++){const t3=n*n*n,f=R0*(1+A*n+B*n*n+C*(n-100)*t3)-R,
+    df=R0*(A+2*B*n+C*(4*t3-300*n*n));if(Math.abs(df)<1e-12)break;n-=f/df;if(Math.abs(f)<1e-6){T=n;break;}}
+  return T;
+}
+const TESTS=[
+  // ═══════════════ INGANGEN ═══════════════
+  // ─── stroom ───
+   {key:"ma_loop_in",get name(){return tr("t_ma_loop_in")},get desc(){return tr("d_ma_loop_in")},sig:SIG.CURRENT,unit:"mA",chan:"input",dir:"in",min:3.8,max:20.5,color:"#2f8f5f",scale:0.001},
+  {key:"loop_24v",get name(){return tr("t_loop_24v")},get desc(){return tr("d_loop_24v")},sig:SIG.CURRENT,unit:"mA",chan:"input",dir:"in",min:3.8,max:20.5,color:"#7b82c0",scale:0.001},
+  // ─── spanning ───
+  {key:"voltage_in",get name(){return tr("t_voltage_in")},get desc(){return tr("d_voltage_in")},sig:SIG.VOLTAGE,unit:"V",chan:"input",dir:"in",min:0,max:10.5,color:"#9a6fd0",scale:0.001},
+  // ─── thermokoppels — mV ───
+  {key:"tc_s_mv",get name(){return tr("t_tc_s_mv")},get desc(){return tr("d_tc_s_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(1,1),min:-1,max:20,color:"#d98a3d",scale:0.001},
+  {key:"tc_b_mv",get name(){return tr("t_tc_b_mv")},get desc(){return tr("d_tc_b_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(2,1),min:0,max:14,color:"#d98a3d",scale:0.001},
+  {key:"tc_e_mv",get name(){return tr("t_tc_e_mv")},get desc(){return tr("d_tc_e_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(3,1),min:-10,max:80,color:"#d98a3d",scale:0.001},
+  {key:"tc_k_mv",get name(){return tr("t_tc_k_mv")},get desc(){return tr("d_tc_k_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(4,1),min:-6,max:55,color:"#d98a3d",scale:0.001},
+  {key:"tc_r_mv",get name(){return tr("t_tc_r_mv")},get desc(){return tr("d_tc_r_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(5,1),min:-1,max:21,color:"#d98a3d",scale:0.001},
+  {key:"tc_j_mv",get name(){return tr("t_tc_j_mv")},get desc(){return tr("d_tc_j_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(6,1),min:-8,max:70,color:"#d98a3d",scale:0.001},
+  {key:"tc_t_mv",get name(){return tr("t_tc_t_mv")},get desc(){return tr("d_tc_t_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(7,1),min:-6,max:22,color:"#d98a3d",scale:0.001},
+  {key:"tc_n_mv",get name(){return tr("t_tc_n_mv")},get desc(){return tr("d_tc_n_mv")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:TC(8,1),min:-4,max:50,color:"#d98a3d",scale:0.001},
+  // ─── thermokoppels — °C ───
+  {key:"tc_s_c",get name(){return tr("t_tc_s_c")},get desc(){return tr("d_tc_s_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(1,2),min:0,max:1768,color:"#e8a84a",scale:1},
+  {key:"tc_b_c",get name(){return tr("t_tc_b_c")},get desc(){return tr("d_tc_b_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(2,2),min:0,max:1820,color:"#e8a84a",scale:1},
+  {key:"tc_e_c",get name(){return tr("t_tc_e_c")},get desc(){return tr("d_tc_e_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(3,2),min:-100,max:1000,color:"#e8a84a",scale:1},
+  {key:"tc_k_c",get name(){return tr("t_tc_k_c")},get desc(){return tr("d_tc_k_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(4,2),min:-200,max:1372,color:"#e8a84a",scale:1},
+  {key:"tc_r_c",get name(){return tr("t_tc_r_c")},get desc(){return tr("d_tc_r_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(5,2),min:0,max:1768,color:"#e8a84a",scale:1},
+  {key:"tc_j_c",get name(){return tr("t_tc_j_c")},get desc(){return tr("d_tc_j_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(6,2),min:-100,max:1200,color:"#e8a84a",scale:1},
+  {key:"tc_t_c",get name(){return tr("t_tc_t_c")},get desc(){return tr("d_tc_t_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(7,2),min:-100,max:400,color:"#e8a84a",scale:1},
+  {key:"tc_n_c",get name(){return tr("t_tc_n_c")},get desc(){return tr("d_tc_n_c")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(8,2),min:-200,max:1300,color:"#e8a84a",scale:1},
+  // ─── thermokoppels — WR (WRe) ───
+  {key:"tc_r_wr",get name(){return tr("t_tc_r_wr")},get desc(){return tr("d_tc_r_wr")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(5,3),min:0,max:2400,color:"#d98a3d",scale:1},
+  {key:"tc_j_wr",get name(){return tr("t_tc_j_wr")},get desc(){return tr("d_tc_j_wr")},sig:SIG.MILLIVOLT,unit:"°C",chan:"input",dir:"in",sub:TC(6,3),min:0,max:2400,color:"#d98a3d",scale:1},
+  // ─── mV ±110 ───
+  {key:"mv_110_in",get name(){return tr("t_mv_110_in")},get desc(){return tr("d_mv_110_in")},sig:SIG.MILLIVOLT,unit:"mV",chan:"input",dir:"in",sub:0x01,min:-110,max:110,color:"#d98a3d",scale:0.001},
+  // ─── RTD / weerstand ───
+  {key:"rtd_pt100",get name(){return tr("t_rtd_pt100")},get desc(){return tr("d_rtd_pt100")},sig:SIG.RESISTANCE,unit:"°C",chan:"input",dir:"in",sub:0x01,min:-100,max:850,color:"#d05f5f",scale:0.1},
+  {key:"rtd_cu50",get name(){return tr("t_rtd_cu50")},get desc(){return tr("d_rtd_cu50")},sig:SIG.RESISTANCE,unit:"°C",chan:"input",dir:"in",sub:0x02,min:-50,max:150,color:"#d05f5f",scale:0.1},
+  {key:"rtd_res_ohm",get name(){return tr("t_rtd_res_ohm")},get desc(){return tr("d_rtd_res_ohm")},sig:SIG.RESISTANCE,unit:"Ω",chan:"input",dir:"in",sub:0x03,min:0,max:400,color:"#d05f5f",scale:0.01},
+  {key:"rtd_pt1000_ohm",get name(){return tr("t_rtd_pt1000_ohm")},get desc(){return tr("d_rtd_pt1000_ohm")},sig:SIG.RESISTANCE,unit:"°C",chan:"input",dir:"in",sub:0x03,min:-100,max:850,color:"#d05f5f",scale:0.01,convert:pt1000ToC},
+  // ─── frequentie ───
+  {key:"freq_in",get name(){return tr("t_freq_in")},get desc(){return tr("d_freq_in")},sig:SIG.FREQUENCY,unit:"Hz",chan:"input",dir:"in",min:0,max:9999,color:"#3fb0b0",scale:1},
+  {key:"freq_pulse",get name(){return tr("t_freq_pulse")},get desc(){return tr("d_freq_pulse")},sig:SIG.FREQUENCY,unit:"Hz",chan:"input",dir:"in",sub:0x01,min:0,max:200000,color:"#3fb0b0",scale:1},
+  {key:"freq_pwm",get name(){return tr("t_freq_pwm")},get desc(){return tr("d_freq_pwm")},sig:SIG.FREQUENCY,unit:"Hz",chan:"input",dir:"in",sub:0x02,min:0,max:9999,color:"#3fb0b0",scale:1},
+  {key:"freq_speed",get name(){return tr("t_freq_speed")},get desc(){return tr("d_freq_speed")},sig:SIG.FREQUENCY,unit:"Hz",chan:"input",dir:"in",sub:0x03,min:0,max:9999,color:"#3fb0b0",scale:1},
+  {key:"freq_counter",get name(){return tr("t_freq_counter")},get desc(){return tr("d_freq_counter")},sig:SIG.FREQUENCY,unit:"pulsen",chan:"input",dir:"in",sub:0x04,min:0,max:999999,color:"#3fb0b0",scale:1},
+
+  // ═══════════════ UITGANGEN ═══════════════
+  // ─── stroom ───
+   {key:"ma_loop_out",get name(){return tr("t_ma_loop_out")},get desc(){return tr("d_ma_loop_out")},sig:SIG_OUT.CURRENT,unit:"mA",chan:"output",dir:"out",min:3.8,max:20.5,color:"#4caf7a",scale:0.001,scaleW:0.001},
+  // ─── spanning ───
+  {key:"voltage_out",get name(){return tr("t_voltage_out")},get desc(){return tr("d_voltage_out")},sig:SIG_OUT.VOLTAGE,unit:"V",chan:"output",dir:"out",min:0,max:10,color:"#b088e0",scale:0.001},
+  // ─── XMT (transmitter) ───
+  {key:"xmt_out",get name(){return tr("t_xmt_out")},get desc(){return tr("d_xmt_out")},sig:SIG_OUT.XMT,unit:"mA",chan:"output",dir:"out",min:0,max:24,color:"#6abf6a",scale:0.001},
+  // ─── mV/Thermokoppel ───
+  {key:"mv_110_out",get name(){return tr("t_mv_110_out")},get desc(){return tr("d_mv_110_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:0x01,min:0,max:110,color:"#e8a84a",scale:0.001},
+  {key:"tc_s_out",get name(){return tr("t_tc_s_out")},get desc(){return tr("d_tc_s_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(1,2),min:0,max:20,color:"#e8a84a",scale:0.001},
+  {key:"tc_b_out",get name(){return tr("t_tc_b_out")},get desc(){return tr("d_tc_b_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(2,2),min:0,max:14,color:"#e8a84a",scale:0.001},
+  {key:"tc_e_out",get name(){return tr("t_tc_e_out")},get desc(){return tr("d_tc_e_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(3,2),min:0,max:80,color:"#e8a84a",scale:0.001},
+  {key:"tc_k_out",get name(){return tr("t_tc_k_out")},get desc(){return tr("d_tc_k_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(4,2),min:0,max:55,color:"#e8a84a",scale:0.001},
+  {key:"tc_r_out",get name(){return tr("t_tc_r_out")},get desc(){return tr("d_tc_r_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(5,2),min:0,max:21,color:"#e8a84a",scale:0.001},
+  {key:"tc_j_out",get name(){return tr("t_tc_j_out")},get desc(){return tr("d_tc_j_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(6,2),min:0,max:70,color:"#e8a84a",scale:0.001},
+  {key:"tc_t_out",get name(){return tr("t_tc_t_out")},get desc(){return tr("d_tc_t_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(7,2),min:0,max:22,color:"#e8a84a",scale:0.001},
+  {key:"tc_n_out",get name(){return tr("t_tc_n_out")},get desc(){return tr("d_tc_n_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(8,2),min:0,max:50,color:"#e8a84a",scale:0.001},
+  {key:"wr_r_out",get name(){return tr("t_wr_r_out")},get desc(){return tr("d_wr_r_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(5,3),min:0,max:24,color:"#e8a84a",scale:0.001},
+  {key:"wr_j_out",get name(){return tr("t_wr_j_out")},get desc(){return tr("d_wr_j_out")},sig:SIG_OUT.MILLIVOLT,unit:"mV",chan:"output",dir:"out",sub:TC(6,3),min:0,max:24,color:"#e8a84a",scale:0.001},
+  // ─── frequentie ───
+  {key:"freq_out",get name(){return tr("t_freq_out")},get desc(){return tr("d_freq_out")},sig:SIG_OUT.FREQUENCY,unit:"Hz",chan:"output",dir:"out",min:0,max:9999,color:"#5ac8c8",scale:1},
+  {key:"freq_pulse_out",get name(){return tr("t_freq_pulse_out")},get desc(){return tr("d_freq_pulse_out")},sig:SIG_OUT.FREQUENCY,unit:"Hz",chan:"output",dir:"out",sub:0x01,min:0,max:200000,color:"#5ac8c8",scale:1},
+  {key:"freq_pwm_out",get name(){return tr("t_freq_pwm_out")},get desc(){return tr("d_freq_pwm_out")},sig:SIG_OUT.FREQUENCY,unit:"Hz",chan:"output",dir:"out",sub:0x02,min:0,max:9999,color:"#5ac8c8",scale:1},
+  {key:"freq_speed_out",get name(){return tr("t_freq_speed_out")},get desc(){return tr("d_freq_speed_out")},sig:SIG_OUT.FREQUENCY,unit:"Hz",chan:"output",dir:"out",sub:0x03,min:0,max:9999,color:"#5ac8c8",scale:1},
+  {key:"freq_qpulse_out",get name(){return tr("t_freq_qpulse_out")},get desc(){return tr("d_freq_qpulse_out")},sig:SIG_OUT.FREQUENCY,unit:"Hz",chan:"output",dir:"out",sub:0x04,min:0,max:200000,color:"#5ac8c8",scale:1},
+  // ─── 24V uitgang ───
+  {key:"v24_out",get name(){return tr("t_v24_out")},get desc(){return tr("d_v24_out")},sig:SIG_OUT.V24,unit:"V",chan:"output",dir:"out",sub:0x01,min:0,max:28,color:"#7b82c0",scale:0.1},
+  // ─── weerstand ───
+  {key:"res_pt100_out",get name(){return tr("t_res_pt100_out")},get desc(){return tr("d_res_pt100_out")},sig:SIG_OUT.RESISTANCE,unit:"Ω",chan:"output",dir:"out",sub:0x01,min:0,max:400,color:"#e06060",scale:0.1},
+  {key:"res_cu_out",get name(){return tr("t_res_cu_out")},get desc(){return tr("d_res_cu_out")},sig:SIG_OUT.RESISTANCE,unit:"Ω",chan:"output",dir:"out",sub:0x02,min:0,max:400,color:"#e06060",scale:0.1},
+  {key:"res_pt1000_out",get name(){return tr("t_res_pt1000_out")},get desc(){return tr("d_res_pt1000_out")},sig:SIG_OUT.RESISTANCE,unit:"Ω",chan:"output",dir:"out",sub:0x03,min:0,max:4000,color:"#e06060",scale:0.1},
+  {key:"res_out",get name(){return tr("t_res_out")},get desc(){return tr("d_res_out")},sig:SIG_OUT.RESISTANCE,unit:"Ω",chan:"output",dir:"out",sub:0x03,min:0,max:4000,color:"#e06060",scale:0.1},
+];
+
+// helper: sub = (TC_type<<4) | mode; mode 1=mV 2=°C
+
+// ---------- CRC ----------
+function crc16(b){let c=0xFFFF;for(const x of b){c^=x;for(let i=0;i<8;i++)c=(c&1)?(c>>>1)^0xA001:c>>>1;}return c;}
+function withCrc(b){const c=crc16(b);return [...b,c&0xFF,(c>>>8)&0xFF];}
+function hx(arr){return arr.map(b=>b.toString(16).padStart(2,"0").toUpperCase()).join(" ");}
+function parseHex(s){const parts=s.trim().split(/[\s,]+/).filter(Boolean);if(parts.some(x=>!/^(?:0x)?[0-9a-f]{1,2}$/i.test(x)))throw new Error("Ongeldige hex-byte");return parts.map(x=>parseInt(x.replace(/^0x/i,""),16));}
+function parseAddress(id){const text=$(id).value.trim().replace(/^0x/i,"");if(!/^[0-9a-f]{1,4}$/i.test(text))throw new Error("Adres moet hex 0000–FFFF zijn");return parseInt(text,16);}
+function parseNumber(id,label){const v=Number($(id).value);if(!Number.isFinite(v))throw new Error(label+" is ongeldig");return v;}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ---------- seriële transport ----------
+class SerialTransport{
+  constructor(port){this.port=port;this.buf=[];this.reader=null;this.closed=false;}
+  async start(){this.reader=this.port.readable.getReader();
+    (async()=>{try{while(!this.closed){const{value,done}=await this.reader.read();
+      if(done)break;if(value)for(const b of value)this.buf.push(b);}}catch(e){}
+      finally{try{this.reader.releaseLock();}catch(e){}this.reader=null;}})();}
+  async write(bytes){const w=this.port.writable.getWriter();try{await w.write(new Uint8Array(bytes));}finally{w.releaseLock();}}
+  clear(){this.buf.length=0;}
+  // lees een compleet frame: wacht op CRC-geldige data of 30ms stabiliteit
+  async readFrame(timeout=900){
+    const t0=performance.now();
+    while(this.buf.length===0){if(performance.now()-t0>timeout)throw new Error("timeout (geen antwoord)");await sleep(1);}
+    let lastLen=0,tLast=performance.now();
+    while(true){
+      const len=this.buf.length;
+      for(let n=5;n<=len;n++){const c=crc16(this.buf.slice(0,n-2));
+        if((c&0xFF)===this.buf[n-2]&&((c>>>8)&0xFF)===this.buf[n-1])return this.buf.splice(0,n);}
+      if(len===lastLen&&len&&performance.now()-tLast>=30)throw new Error("ongeldig of onvolledig antwoord");
+      if(len!==lastLen){lastLen=len;tLast=performance.now();}
+      if(performance.now()-t0>timeout+800)break;
+      await sleep(1);}
+    throw new Error("timeout (onvolledig antwoord)");
+  }
+  async close(){this.closed=true;try{if(this.reader)await this.reader.cancel();}catch(e){}
+    try{await this.port.close();}catch(e){}}
+}
+
+// ---------- device ----------
+class SG004A{
+  constructor(){this.transport=null;this.slave=1;this.wordOrder="abcd";this.fcMode="custom";
+    this.simulate=true;this.connected=false;this.onMonitor=null;this.onState=null;
+    this.port=null;this.armed=false;this._arInstalled=false;
+    this._t0=performance.now();this._inType=SIG.CURRENT;this._outType=SIG.CURRENT;this._outOn=null;this._busy=false;this._blindUntil=0;}
+  mon(dir,msg){if(this.onMonitor)this.onMonitor(dir,msg);}
+
+  async connect(opts){Object.assign(this,opts);
+    if(this.simulate){this.connected=true;return;}
+    if(!("serial" in navigator))throw new Error(tr("no_serial"));
+    this.armed=true;
+    if(!this.port){this.port=await navigator.serial.requestPort();this._installAutoReconnect();}
+    await this._open();}
+  async _open(){
+    if(!this.port)return;
+    await this.port.open({baudRate:this.baud,dataBits:8,stopBits:1,parity:"none"});
+    try{await this.port.setSignals({dataTerminalReady:true,requestToSend:true});}catch(e){}
+    this.transport=new SerialTransport(this.port);await this.transport.start();this._outOn=null;this.connected=true;}
+  _installAutoReconnect(){
+    if(this._arInstalled)return;this._arInstalled=true;
+    navigator.serial.addEventListener("disconnect",async e=>{
+      if(e.target===this.port){this.connected=false;
+        const old=this.transport;this.transport=null;if(old){try{await old.close();}catch(err){}}
+        if(this.onState)this.onState(false,tr("port_offline"));}});
+    navigator.serial.addEventListener("connect",async e=>{
+      if(this.armed&&e.target===this.port&&!this.connected){
+        try{await this._open();if(this.onState)this.onState(true,tr("port_reopened"));}
+        catch(err){if(this.onState)this.onState(false,tr("reopen_fail")+" "+err.message);}}});}
+  async close(){this.armed=false;if(this.transport)await this.transport.close();this.transport=null;this.connected=false;}
+
+  async _txn(frame, onResponseTimeout){
+    if(this.simulate)throw new Error("(simulatie — geen echte transactie)");
+    while(this._busy)await sleep(2);
+    this._busy=true;
+    try{
+    if(this._blindUntil){const wait=this._blindUntil-performance.now();if(wait>0)await sleep(wait);this._blindUntil=0;}
+    // De vorige transactie consumeert zijn eigen antwoord; alleen reeds aanwezige restbytes wissen.
+    this.transport.clear();
+    this.mon("tx",hx(frame));
+    await this.transport.write(frame);
+    const responseTimeout=onResponseTimeout||1000;
+    let resp;
+    try{resp=await this.transport.readFrame(responseTimeout);}
+    catch(e){this.transport.clear();this.mon("err",tr("timeout",responseTimeout));return [];}
+    this.transport.clear();
+    // bij FC-mismatch: blijf proberen tot we een matchende frame hebben of timeout
+    let mismatchCount=0;
+    while(resp.length>1&&resp[1]!==frame[1]&&resp[1]!==((frame[1]|0x80)&0xFF)){
+      const exc=(resp[1]&0x80)?", exc=0x"+resp[2].toString(16):"";
+      this.mon("err",tr("fc_mismatch",frame[1].toString(16),resp[1].toString(16))+exc);
+      mismatchCount++;
+      if(mismatchCount>3){resp=[];break;}
+      try{resp=await this.transport.readFrame(responseTimeout);}
+      catch(e2){this.transport.clear();resp=[];break;}
+      this.transport.clear();}
+    this.mon("rx",hx(resp));
+    if(resp.length<5)throw new Error(tr("short_reply",resp.length));
+    const c=crc16(resp.slice(0,-2));
+    if((c&0xFF)!==resp[resp.length-2]||((c>>>8)&0xFF)!==resp[resp.length-1])throw new Error(tr("crc_err",hx([c&0xFF,(c>>>8)&0xFF])));
+    if(resp[0]!==frame[0])throw new Error(tr("slave_mismatch",frame[0].toString(16),resp[0].toString(16)));
+    if(resp[1]===(frame[1]|0x80))throw new Error("Modbus exception 0x"+(resp[2]||0).toString(16).toUpperCase());
+    if(resp[1]!==frame[1])throw new Error(tr("fc_mismatch",frame[1].toString(16),resp[1].toString(16)));
+    return resp;}
+    finally{this._busy=false;}}
+  // verstuur frame en consummeer het antwoord — device reageert traag op writes
+  async _sendOnly(frame){
+    if(this.simulate)throw new Error("(simulatie — geen echte transactie)");
+    while(this._busy)await sleep(2);
+    this._busy=true;
+    try{
+    this.transport.clear();
+    this.mon("tx",hx(frame));
+    await this.transport.write(frame);
+    // De SG-004A antwoordt op 0x67 typisch pas na circa 750 ms.
+    // Wacht dit antwoord volledig af, anders wordt het door de volgende 0x66-read opgepakt.
+    let resp;
+    try{resp=await this.transport.readFrame(1100);}catch(e){resp=[];}
+    this.transport.clear();
+    if(!resp.length)throw new Error("timeout (geen schrijfbevestiging)");
+    this.mon("rx",hx(resp));
+    const c=crc16(resp.slice(0,-2));
+    if(resp.length<5||(c&0xFF)!==resp[resp.length-2]||((c>>>8)&0xFF)!==resp[resp.length-1])throw new Error("ongeldige schrijfbevestiging");
+    if(resp[0]!==frame[0]||resp[1]!==frame[1])throw new Error("onverwachte schrijfbevestiging");
+    }finally{this._busy=false;}}
+  async _sendBlind(frame){
+    if(this.simulate)return;
+    while(this._busy)await sleep(2);
+    this._busy=true;
+    try{this.transport.clear();this.mon("tx",hx(frame)+"  [blind]");await this.transport.write(frame);
+      this._blindUntil=performance.now()+900;}
+    finally{this._busy=false;}}
+  _readFrame(addr,count,isFloat){
+    if(this.fcMode==="standard")
+      return withCrc([this.slave,FC.STD_READ,(addr>>8)&0xFF,addr&0xFF,(count>>8)&0xFF,count&0xFF]);
+    const fc=isFloat?FC.R_F:FC.R_U16;
+    return withCrc([this.slave,fc,(addr>>8)&0xFF,addr&0xFF,(count>>8)&0xFF,count&0xFF]);}
+  _writeU16Frame(addr,val){
+    const fc=this.fcMode==="standard"?FC.STD_W1:FC.W_U16;
+    return withCrc([this.slave,fc,(addr>>8)&0xFF,addr&0xFF,(val>>8)&0xFF,val&0xFF]);}
+  _writeFloatFrame(addr,val){
+    const data=this._floatToBytes(val);
+    const fc=this.fcMode==="standard"?FC.STD_WN:FC.W_F;
+    return withCrc([this.slave,fc,(addr>>8)&0xFF,addr&0xFF,0,2,4,...data]);}
+
+  _bytesToFloat(b){let bb=b;if(this.wordOrder==="cdab")bb=[b[2],b[3],b[0],b[1]];
+    return new DataView(new Uint8Array(bb).buffer).getFloat32(0,false);}
+  _floatToBytes(val){const dv=new DataView(new ArrayBuffer(4));dv.setFloat32(0,val,false);
+    let b=[dv.getUint8(0),dv.getUint8(1),dv.getUint8(2),dv.getUint8(3)];
+    if(this.wordOrder==="cdab")b=[b[2],b[3],b[0],b[1]];return b;}
+  // responsformaat (zowel standaard als custom): [slave][fc][bytecount][data..][crc]
+  _extractData(resp,n){
+    if(resp.length>=3+n+2)return resp.slice(3,3+n);     // bytecount aanwezig
+    if(resp.length>=2+n+2)return resp.slice(2,2+n);     // zonder bytecount
+    throw new Error("Antwoord te kort ("+resp.length+" B) voor "+n+" data bytes");}
+
+  async readU16(addr){if(this.simulate)return this._simU16(addr);
+    const r=await this._txn(this._readFrame(addr,1,false));const d=this._extractData(r,2);return (d[0]<<8)|d[1];}
+  async readU16Retry(addr,attempts=2){let last;for(let i=0;i<attempts;i++){try{return await this.readU16(addr);}catch(e){last=e;if(i+1<attempts)await sleep(80);}}throw last;}
+  async readFloat(addr){if(this.simulate)return this._simFloat(addr);
+    const r=await this._txn(this._readFrame(addr,2,true));const d=this._extractData(r,4);
+    return {value:this._bytesToFloat(d),raw:d,
+            abcd:new DataView(new Uint8Array(d).buffer).getFloat32(0,false),
+            cdab:new DataView(new Uint8Array([d[2],d[3],d[0],d[1]]).buffer).getFloat32(0,false)};}
+  async readFloatRetry(addr,attempts=2){let last;for(let i=0;i<attempts;i++){try{return await this.readFloat(addr);}catch(e){last=e;if(i+1<attempts)await sleep(80);}}throw last;}
+  async writeU16(addr,val){if(this.simulate)return this._simWriteU16(addr,val);
+    await this._txn(this._writeU16Frame(addr,val));}
+  async writeFloat(addr,val){if(this.simulate){if(addr===REG_OUTPUT_VALUE)this._outVal=val;return true;}
+    await this._txn(this._writeFloatFrame(addr,val));}
+  async sendRaw(frame){if(this.simulate)return [];return this._txn(frame,200);}
+
+  async readFirmware(){return this.readU16(REG_FIRMWARE);}
+  async setInputType(s,sub=0){if(this.simulate)this._inType=s;return this.writeU16(REG_INPUT_SIGNAL,((s&0xFF)<<8)|(sub&0xFF));}
+  async setOutputType(s,sub=0){if(this.simulate)this._outType=s;return this.writeU16(REG_OUTPUT_SIGNAL,((s&0xFF)<<8)|(sub&0xFF));}
+  async setOutputEnabled(on){if(this._outOn===on)return true;if(this.simulate){this._outOn=on;return true;}
+    await this.writeU16(REG_OUTPUT_SWITCH,on?0x0102:0x0101);this._outOn=on;return true;}
+  async setOutputValue(eng,t){const sw=t&&(t.scaleW||t.scale);const raw=(sw&&!this.simulate)?eng/sw:eng;return this.writeFloat(REG_OUTPUT_VALUE,raw);}
+  async writeFloatOnly(addr,val,blind=false){if(this.simulate){if(addr===REG_OUTPUT_VALUE)this._outVal=val;return;}
+    await (blind?this._sendBlind(this._writeFloatFrame(addr,val)):this._sendOnly(this._writeFloatFrame(addr,val)));}
+  async setOutputValueOnly(eng,t,blind=false){const sw=t&&(t.scaleW||t.scale);const raw=(sw&&!this.simulate)?eng/sw:eng;
+    return this.writeFloatOnly(REG_OUTPUT_VALUE,raw,blind);}
+  async readInputValue(){const r=await this.readFloat(REG_INPUT_VALUE);return typeof r==="number"?r:r.value;}
+  async readOutputValue(){const r=await this.readFloat(REG_OUTPUT_VALUE);return typeof r==="number"?r:r.value;}
+  async readBothValues(){const r=await this._txn(this._readFrame(REG_INPUT_VALUE,4,true));
+    if(r.length<11)throw new Error("te kort antwoord voor 2 floats ("+r.length+" B)");
+    const d=this._extractData(r,8);
+    return {in:this._bytesToFloat(d.slice(0,4)),out:this._bytesToFloat(d.slice(4,8))};}
+
+  // simulatie
+  _base(s){const t=(performance.now()-this._t0)/1000,x=(Math.sin(t/6)+1)/2;
+    switch(s){case SIG.CURRENT:return 4+x*16;case SIG.VOLTAGE:return x*10;case SIG.FREQUENCY:return x*1000;
+      case SIG.MILLIVOLT:return -10+x*110;case SIG.RESISTANCE:return 100+x*290;default:return x*100;}}
+  _simU16(a){if(a===REG_FIRMWARE)return 0x0101;if(a===REG_INPUT_SIGNAL)return this._inType<<8;
+    if(a===REG_OUTPUT_SIGNAL)return this._outType<<8;if(a===REG_OUTPUT_SWITCH)return this._outOn?1:0;return 0;}
+  _simWriteU16(a,v){if(a===REG_INPUT_SIGNAL)this._inType=(v>>8)&0xFF;else if(a===REG_OUTPUT_SIGNAL){this._outType=(v>>8)&0xFF;this._outVal=null;}
+    else if(a===REG_OUTPUT_SWITCH)this._outOn=!!(v&1);}
+  _simFloat(a){let v=0;if(a===REG_INPUT_VALUE){const b=this._base(this._inType);v=b+(Math.random()-.5)*0.02*Math.abs(b||1);}
+    else if(a===REG_OUTPUT_VALUE){v=this._outOn?(this._outVal!=null?this._outVal:this._base(this._outType)):0;}
+    return {value:v,raw:[0,0,0,0],abcd:v,cdab:v};}
+}
+
+// ---------- UI ----------
+const dev=new SG004A();
+let activeInTest=null,activeOutTest=null,recording=false,session=null,startTime=0,pollTimer=null;
+const fg={running:false,t0:0,period:10,wave:"sine",min:4,max:20,cycles:0,steps:5,dir:"up",cyc:0,errors:0,blind:false,lastVal:null};
+const trend=[];
+const $=id=>document.getElementById(id);
+const ARIA_LABELS={pollInterval:"Meetinterval in milliseconden",sim:"Simulatiemodus",langToggle:"Taal wisselen",kks:"KKS-naam",operator:"Operator",notes:"Opmerking",outSet:"Uitgangsstuurwaarde",fgWave:"Golfvorm",fgMin:"Minimum generatorwaarde",fgMax:"Maximum generatorwaarde",fgPeriod:"Generatorperiode in seconden",fgCycles:"Aantal generatorcycli",fgSteps:"Aantal trapstappen",fgDir:"Generatorrichting",fgBlind:"Functiegenerator blind schrijven",rAddr:"Leesadres in hex",rType:"Datatype voor lezen",wAddr:"Schrijfadres in hex",wType:"Datatype voor schrijven",wVal:"Te schrijven waarde",rawHex:"Ruwe hex-bytes",rawCrc:"CRC automatisch toevoegen",baud:"Baudrate",slave:"Modbus slave-ID",fcmode:"Functiecodemodus",word:"Float-woordvolgorde",inScale:"Ingangsschaalfactor",outScale:"Uitgangsschaalfactor"};
+for(const [id,label] of Object.entries(ARIA_LABELS)){const el=$(id);if(el)el.setAttribute("aria-label",label);}
+
+// langToggle moet NA $() komen (const TDZ)
+$("langToggle").onclick=()=>{
+  L10N._lang=L10N._lang==="nl"?"en":"nl";L10N.setLang(L10N._lang);
+  applyLang();
+  $("inTests").innerHTML="";$("outTests").innerHTML="";
+  buildTypeMenu($("inTests"),"in");buildTypeMenu($("outTests"),"out");
+  if(activeInTest){$("inName").textContent=activeInTest.name;syncInputControls(activeInTest);}
+  if(activeOutTest){$("outName").textContent=activeOutTest.name;syncOutputControls(activeOutTest);}
+  updateOutControls();
+};
+
+function appendTextLine(el,className,text){const row=document.createElement("div");row.className=className;row.textContent=text;el.appendChild(row);}
+function log(msg,cls=""){const el=$("log");const d=new Date();
+  const ts=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}.${String(d.getMilliseconds()).padStart(3,"0")}`;
+  appendTextLine(el,"ln "+cls,`[${ts}] ${msg}`);el.scrollTop=el.scrollHeight;}
+function mon(dir,msg){const el=$("monitor");const tag=dir==="tx"?"TX ":dir==="rx"?"RX ":dir==="err"?"   ":"-- ";
+  const d=new Date(),ts=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}.${String(d.getMilliseconds()).padStart(3,"0")}`;
+  appendTextLine(el,dir,`[${ts}] ${tag}${msg}`);
+  while(el.children.length>1000)el.removeChild(el.firstChild);el.scrollTop=el.scrollHeight;}
+dev.onMonitor=mon;
+
+// ─── Type + subtype menustructuur (zoals Temperature: eerst type, dan subtype) ───
+const IN_TYPES=[
+  {l:"Current",items:[{l:"Actual mA",k:"ma_loop_in"},{l:"Loop + 24V",k:"loop_24v"}]},
+  {l:"Voltage",items:[{l:"Actual V",k:"voltage_in"}]},
+  {l:"Frequency",items:[
+    {l:"Pulse",k:"freq_pulse"},{l:"PWM",k:"freq_pwm"},
+    {l:"Speed",k:"freq_speed"},{l:"Counter",k:"freq_counter"}]},
+  {l:"Temperature",sub:[
+    {l:"mV",items:[{l:"±110 mV",k:"mv_110_in"}]},
+    {l:"TC",tcIn:true},
+    {l:"WR",items:[{l:"WRe25",k:"tc_r_wr"},{l:"WRe26",k:"tc_j_wr"}]}]},
+  {l:"Resistance",items:[
+    {l:"Pt100",k:"rtd_pt100"},{l:"Pt1000",k:"rtd_pt1000_ohm"},{l:"Cu",k:"rtd_cu50"},{l:"Ω",k:"rtd_res_ohm"}]}];
+
+const OUT_TYPES=[
+  {l:"Current",items:[{l:"Actual mA",k:"ma_loop_out"}],settings:[{l:"Range"},{l:"Loop voltage 12/24V"},{l:"Output range 0-24mA/4-20mA/..."}]},
+  {l:"Voltage",items:[{l:"Actual V",k:"voltage_out"}],settings:[{l:"Range"},{l:"Output range 1-5V/0-5V/..."}]},
+  {l:"XMT",items:[{l:"Actual",k:"xmt_out"}],settings:[{l:"Range"},{l:"Output range 0-24mA/4-20mA/..."}]},
+  {l:"Frequency",items:[
+    {l:"Pulse",k:"freq_pulse_out"},{l:"PWM",k:"freq_pwm_out"},
+    {l:"Speed",k:"freq_speed_out"},{l:"Q-Pulse",k:"freq_qpulse_out"}],
+    settings:[{l:"Output mode Level/Open collector"},{l:"Output range 0-99.99Hz/0-999.99Hz/..."}]},
+  {l:"Temperature",sub:[
+    {l:"mV",items:[{l:"±110 mV",k:"mv_110_out"}]},
+    {l:"TC",tcOut:true},
+    {l:"WR",items:[{l:"WRe25",k:"wr_r_out"},{l:"WRe26",k:"wr_j_out"}]}]},
+  {l:"24V Supply",items:[{l:"Actual",k:"v24_out"}],settings:[{l:"Range"},{l:"Use 24V output"},{l:"Keep output active"}]},
+  {l:"Resistance",items:[
+    {l:"Pt100",k:"res_pt100_out"},{l:"Pt1000",k:"res_pt1000_out"},{l:"Cu",k:"res_cu_out"},{l:"Ω",k:"res_out"}]}];
+
+function findTypeByKey(key,dir){
+  const types=dir==="in"?IN_TYPES:OUT_TYPES;
+  for(const t of types){
+    if(t.items)for(const i of t.items)if(i.k===key)return t;
+    if(t.sub)for(const s of t.sub){
+      if(s.items)for(const i of s.items)if(i.k===key)return t;
+      if(s.tcIn||s.tcOut){
+        if(key.startsWith("tc_")||key.startsWith("wr_")||key==="mv_"+(dir==="in"?"in":"out")+"_110")return t;}}
+  }return types[0];}
+
+function setupTcEvents(dir){
+  if(dir==="in"){
+    const sel=$("tcSelIn"),mw=$("tcModeWrapIn"),m=$("tcModeIn"),go=$("tcGoIn");
+    if(!sel)return;
+    sel.onchange=()=>{mw.style.display=(sel.value==="tc_r_wr"||sel.value==="tc_j_wr")?"none":"";go.textContent="\u203A";};
+    go.onclick=()=>{
+      if(sel.value==="tc_r_wr"||sel.value==="tc_j_wr"){const t=TESTS.find(x=>x.key===sel.value);if(t)selectTest(t,dir);}
+      else{const k="tc_"+sel.value.toLowerCase()+"_"+m.value;const t=TESTS.find(x=>x.key===k);if(t)selectTest(t,dir);}};
+  }else{
+    const sel=$("tcSelOut"),go=$("tcGoOut");
+    if(!sel)return;
+    go.onclick=()=>{
+      if(sel.value==="wr_r_out"||sel.value==="wr_j_out"){const t=TESTS.find(x=>x.key===sel.value);if(t)selectTest(t,dir);}
+      else{const t=TESTS.find(x=>x.key==="tc_"+sel.value.toLowerCase()+"_out");if(t)selectTest(t,dir);}};}}
+
+let _alignMeasureFrame=0;
+function scheduleMeasurementAlignment(){
+  cancelAnimationFrame(_alignMeasureFrame);
+  _alignMeasureFrame=requestAnimationFrame(()=>{
+    const a=$("inTests"),b=$("outTests");if(!a||!b)return;
+    a.style.minHeight="";b.style.minHeight="";
+    if(matchMedia("(max-width:760px)").matches)return;
+    _alignMeasureFrame=requestAnimationFrame(()=>{
+      const h=Math.max(a.getBoundingClientRect().height,b.getBoundingClientRect().height);
+      a.style.minHeight=h+"px";b.style.minHeight=h+"px";
+    });
+  });
+}
+
+function showType(type,subBox,dir){
+  subBox.innerHTML="";
+  const activeKey=dir==="in"?activeInTest?.key:activeOutTest?.key;
+  if(type.items){
+    type.items.forEach(item=>{const t=TESTS.find(x=>x.key===item.k);if(!t)return;
+      const b=document.createElement("button");b.type="button";b.className="test-btn-sm";b.dataset.key=item.k;b.dataset.dir=dir;
+      b.innerHTML=`<span class="swatch" style="background:${t.color}"></span> ${item.l}${t.unit?` <small>${t.unit}</small>`:""}`;
+      b.onclick=()=>selectTest(t,dir);subBox.appendChild(b);});
+    if(activeKey)subBox.querySelector(`[data-key="${activeKey}"]`)?.classList.add("active");}
+  if(type.sub){
+    const sr=document.createElement("div");sr.className="sub-type-row";
+    const so=document.createElement("div");so.className="sub-type-outer";
+    let picked=null;
+    const mkBtn=(l,cb)=>{const sb=document.createElement("button");sb.className="sub-type-btn";sb.textContent=l;
+      sb.onclick=()=>{sr.querySelectorAll(".sub-type-btn").forEach(b=>b.classList.remove("active"));sb.classList.add("active");so.innerHTML="";cb(so);scheduleMeasurementAlignment();};
+      sr.appendChild(sb);return sb;};
+    type.sub.forEach(sub=>{
+      if(sub.items){
+        const sb=mkBtn(sub.l,out=>{
+          sub.items.forEach(item=>{const t=TESTS.find(x=>x.key===item.k);if(!t)return;
+            const b=document.createElement("button");b.type="button";b.className="test-btn-sm";b.dataset.key=item.k;b.dataset.dir=dir;
+            b.innerHTML=`<span class="swatch" style="background:${t.color}"></span> ${item.l}${t.unit?` <small>${t.unit}</small>`:""}`;
+            b.onclick=()=>selectTest(t,dir);out.appendChild(b);});
+          if(activeKey)out.querySelector(`[data-key="${activeKey}"]`)?.classList.add("active");});
+        if(activeKey&&sub.items.some(i=>i.k===activeKey))picked=sb;}
+      if(sub.tcIn){
+        const sb=mkBtn("TC",out=>{
+          out.innerHTML=`<span class="tc-wrap"><span class="tc-label">▸ TC</span>
+            <select class="tc-sel" id="tcSelIn">
+              <option value="S">S</option><option value="B">B</option><option value="E">E</option><option value="K">K</option>
+              <option value="R">R</option><option value="J">J</option><option value="T">T</option><option value="N">N</option>
+              <option value="tc_r_wr">WRe25</option><option value="tc_j_wr">WRe26</option>
+            </select>
+            <span id="tcModeWrapIn" style="display:inline-flex;gap:2px">
+              <select class="tc-sel" id="tcModeIn"><option value="c">°C</option><option value="mv">mV</option></select>
+            </span>
+            <button class="tiny" id="tcGoIn">&gt;</button></span>`;
+          setupTcEvents(dir);});
+        if(activeKey&&(activeKey.startsWith("tc_")||activeKey.startsWith("wr_")||activeKey==="mv_110_in"))picked=sb;}
+      if(sub.tcOut){
+        const sb=mkBtn("TC",out=>{
+          out.innerHTML=`<span class="tc-wrap"><span class="tc-label">▸ TC</span>
+            <select class="tc-sel" id="tcSelOut">
+              <option value="S">S</option><option value="B">B</option><option value="E">E</option><option value="K">K</option>
+              <option value="R">R</option><option value="J">J</option><option value="T">T</option><option value="N">N</option>
+              <option value="wr_r_out">WRe25</option><option value="wr_j_out">WRe26</option>
+            </select>
+            <button class="tiny" id="tcGoOut">&gt;</button></span>`;
+          setupTcEvents(dir);});
+        if(activeKey&&(activeKey.startsWith("tc_")||activeKey.startsWith("wr_")||activeKey==="mv_110_out"))picked=sb;}});
+    subBox.append(sr,so);
+    (picked||sr.firstChild)?.click();}
+  if(type.settings)type.settings.forEach(s=>{
+    const e=document.createElement("div");e.className="setting-item";
+    e.textContent="⚙ "+s.l;e.title=tr("setting_help");
+    e.onclick=()=>log(tr("setting_help")+": "+s.l,"warn");subBox.appendChild(e);});
+  scheduleMeasurementAlignment();}
+
+function switchToType(key,dir){
+  const types=dir==="in"?IN_TYPES:OUT_TYPES;
+  const type=key?findTypeByKey(key,dir):types[0];
+  const container=dir==="in"?$("inTests"):$("outTests");
+  const btns=container.querySelectorAll(".type-btn");
+  const idx=types.indexOf(type);
+  if(btns[idx])btns[idx].click();}
+
+function syncInputControls(t){
+  const key=t?t.key:null;
+  switchToType(key,"in");
+  document.querySelectorAll("#inTests .test-btn-sm").forEach(b=>b.classList.toggle("active",b.dataset.key===key));
+  if(key&&$("tcSelIn")){
+    if(key.startsWith("tc_")){
+      if(key.endsWith("_wr")){$("tcSelIn").value=key;$("tcModeWrapIn").style.display="none";}
+      else{const p=key.split("_");$("tcSelIn").value=p[1].toUpperCase();$("tcModeWrapIn").style.display="";$("tcModeIn").value=p[2];}}
+    else if(key==="mv_110_in"){$("tcSelIn").selectedIndex=0;}}
+}
+function syncOutputControls(t){
+  const key=t?t.key:null;
+  switchToType(key,"out");
+  document.querySelectorAll("#outTests .test-btn-sm").forEach(b=>b.classList.toggle("active",b.dataset.key===key));
+  if(key&&$("tcSelOut")){
+    if(key.startsWith("tc_")){$("tcSelOut").value=key.replace("tc_","").replace("_out","").toUpperCase();}
+    else if(key.startsWith("wr_")){$("tcSelOut").value=key;}
+    else if(key==="mv_110_out"){$("tcSelOut").selectedIndex=0;}}
+}
+
+function buildTypeMenu(container,dir){
+  const types=dir==="in"?IN_TYPES:OUT_TYPES;
+  container.innerHTML="";
+  const sr=document.createElement("div");sr.className="type-sel-row";
+  const sb=document.createElement("div");sb.className="type-sub-box";
+  const btns=[];
+  types.forEach(t=>{
+    const b=document.createElement("button");b.className="type-btn";b.textContent=t.l;
+    b.onclick=()=>{sr.querySelectorAll(".type-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");showType(t,sb,dir);};
+    sr.appendChild(b);btns.push(b);});
+  container.append(sr,sb);
+  switchToType(dir==="in"?activeInTest?.key:activeOutTest?.key,dir);scheduleMeasurementAlignment();}
+// init menu
+buildTypeMenu($("inTests"),"in");buildTypeMenu($("outTests"),"out");
+updateOutControls();
+
+function setDiagEnabled(on){["probe","rBtn","wBtn","rawBtn"].forEach(id=>$(id).disabled=!on);}
+
+dev.onState=(connected,msg)=>{
+  if(connected){setStatus(true,tr("connected"));$("connect").textContent=tr("disconnect");
+    setDiagEnabled(true);startPoll();updateOutControls();if(msg)log(msg);}
+  else{setStatus(false,msg||tr("port_offline"));stopPoll();if(fg.running)stopFg("fg_conn_lost");
+    if(recording)stopRecording();updateOutControls();if(msg)log(msg,"warn");}
+};
+
+$("connect").onclick=async()=>{
+  const active=dev.armed||(dev.simulate&&dev.connected);
+  if(active){stopPoll();if(fg.running)stopFg("fg_manual");await dev.close();setStatus(false,tr("not_connected"));
+    $("connect").textContent=tr("connect");$("record").disabled=true;setDiagEnabled(false);updateOutControls();log(tr("conn_closed"));return;}
+  try{
+    await dev.connect({simulate:$("sim").checked,baud:parseInt($("baud").value),
+      slave:parseInt($("slave").value)||1,wordOrder:"abcd",fcMode:"custom"});
+    const m=$("sim").checked?"SIMULATIE":"COM";
+    // Eerst firmware en actuele kanaalconfiguratie ophalen; pas daarna polling starten.
+    if(dev.onState)await dev.onState(true,tr("reconnect_armed",m));
+    setStatus(true,m==="SIMULATIE"?tr("connected_sim"):tr("connected_com"));
+  }catch(e){dev.armed=false;log(tr("conn_fail")+" "+e.message,"warn");alert(tr("conn_fail")+"\n"+e.message);}
+};
+function setStatus(on,t){$("status").classList.toggle("on",on);$("statusText").textContent=t;}
+// instellingen live bijwerken
+$("slave").onchange=()=>{dev.slave=parseInt($("slave").value)||1;};
+
+$("probe").onclick=async()=>{
+  try{const fw=await dev.readFirmware();const bcd=fw&0xFF;const maj=(bcd>>4)&0xF,min=bcd&0xF;
+    log(tr("probe_ok",maj,min,fw.toString(16).toUpperCase()));}
+  catch(e){log(tr("probe_fail",e.message),"warn");}};
+
+$("rBtn").onclick=async()=>{const out=$("rOut");
+  try{const addr=parseAddress("rAddr");if($("rType").value==="float"){const r=await dev.readFloat(addr);
+      out.textContent=`= ${r.value.toFixed(4)}  | bytes ${hx(r.raw)} | ABCD=${r.abcd.toFixed(4)}  CDAB=${r.cdab.toFixed(4)}`;}
+    else{const v=await dev.readU16(addr);out.textContent=`= ${v}  (0x${v.toString(16).toUpperCase()})`;}}
+  catch(e){out.textContent=tr("error")+" "+e.message;}};
+
+$("wBtn").onclick=async()=>{const out=$("wOut");
+  try{const addr=parseAddress("wAddr");if($("wType").value==="float"){await dev.writeFloat(addr,parseNumber("wVal","Waarde"));out.textContent=tr("written_float");}
+    else{const text=$("wVal").value.trim();if(!/^(?:0x[0-9a-f]{1,4}|\d{1,5})$/i.test(text))throw new Error("uint16-waarde is ongeldig");const v=text.toLowerCase().startsWith("0x")?parseInt(text,16):parseInt(text,10);if(v>65535)throw new Error("uint16 moet 0–65535 zijn");
+      await dev.writeU16(addr,v&0xFFFF);out.textContent=tr("written_u16")+" (0x"+(v&0xFFFF).toString(16).toUpperCase()+")";}}
+  catch(e){out.textContent=tr("error")+" "+e.message;}};
+
+$("rawBtn").onclick=async()=>{const out=$("rawOut");try{let f=parseHex($("rawHex").value);
+    if(!f.length){out.textContent=tr("no_bytes");return;}if($("rawCrc").checked)f=withCrc(f);
+    const r=await dev.sendRaw(f);out.textContent=tr("reply")+" "+(r.length?hx(r):tr("reply_empty"));}
+  catch(e){out.textContent=tr("error")+" "+e.message;}};
+
+$("clearMon").onclick=()=>$("monitor").innerHTML="";
+$("clearLog").onclick=()=>$("log").innerHTML="";
+$("inScale").onchange=()=>{if(activeInTest){const s=parseFloat($("inScale").value);if(isFinite(s)&&s!==0){activeInTest.scale=s;log(tr("scale_adj",activeInTest.name,"\u00d7"+s));}else $("inScale").value=activeInTest.scale||1;}};
+$("outScale").onchange=()=>{if(activeOutTest){const s=parseFloat($("outScale").value);if(isFinite(s)&&s!==0){activeOutTest.scale=s;log(tr("scale_adj",activeOutTest.name,"\u00d7"+s));}else $("outScale").value=activeOutTest.scale||1;}};
+
+// ---------- uitgangsbesturing + functiegenerator ----------
+function applyGeneratorRange(t){
+  if(!t||t.dir!=="out")return;
+  for(const id of ["fgMin","fgMax"]){
+    if(t.min!==undefined)$(id).min=t.min;
+    if(t.max!==undefined)$(id).max=t.max;
+  }
+  if(!fg.running){
+    if(t.min!==undefined)$("fgMin").value=t.min;
+    if(t.max!==undefined)$("fgMax").value=t.max;
+  }
+}
+function updateOutControls(){
+  const en=dev.connected&&!!activeOutTest;
+  $("outSetUnit").textContent=activeOutTest?activeOutTest.unit:"";
+  const voltageStep=activeOutTest&&activeOutTest.unit==="V"?"0.1":"any";
+  $("outSet").step=voltageStep;$("fgMin").step=voltageStep;$("fgMax").step=voltageStep;
+  if(activeOutTest&&activeOutTest.min!==undefined)$("outSet").min=activeOutTest.min;
+  if(activeOutTest&&activeOutTest.max!==undefined)$("outSet").max=activeOutTest.max;
+  $("outSet").disabled=!en||fg.running;
+  $("outSend").disabled=!en||fg.running;
+  $("fgStart").disabled=!en||fg.running;
+  $("fgStop").disabled=!fg.running;
+  $("outOff").disabled=!en;
+  $("outOff").textContent=dev._outOn?tr("out_off"):tr("out_on");
+  ["fgWave","fgCycles","fgDir","fgBlind"].forEach(id=>$(id).disabled=fg.running);
+  ["fgMin","fgMax","fgPeriod","fgSteps"].forEach(id=>$(id).disabled=!en);
+  $("fgState").textContent=fg.running?(tr("fg_on")+" \u2014 "+fg.wave):tr("fg_off");
+  $("fgState").classList.toggle("on",fg.running);
+}
+function generatorUpdateMs(){
+  const commFloor=dev.simulate?50:(activeInTest?1550:800);
+  return Math.max(parseInt($("pollInterval").value)||500,commFloor);
+}
+function applyLiveGeneratorTiming(period,points){
+  if(fg.running){
+    const now=performance.now(),oldPeriod=fg.period>0?fg.period:period;
+    const cyclePosition=(now-fg.t0)/1000/oldPeriod;
+    fg.t0=now-cyclePosition*period*1000;
+  }
+  fg.period=period;fg.steps=points;
+}
+function syncPointsToPeriod(){
+  const per=parseFloat($("fgPeriod").value);if(!(per>0))return;
+  const updateMs=generatorUpdateMs();
+  const points=Math.max(2,Math.floor(per*1000/updateMs));
+  $("fgSteps").value=points;
+  if(fg.running)applyLiveGeneratorTiming(per,points);
+  log("Punten/cyclus aangepast aan periode: "+points+" punten bij "+per+" s ("+updateMs+" ms/punt).");
+}
+function syncPeriodToPoints(){
+  const points=Math.max(2,parseInt($("fgSteps").value)||2),updateMs=generatorUpdateMs();
+  const period=Math.ceil(points*updateMs/100)/10;
+  $("fgSteps").value=points;$("fgPeriod").value=period;
+  if(fg.running)applyLiveGeneratorTiming(period,points);
+  log("Periode aangepast aan punten/cyclus: "+period+" s voor "+points+" punten ("+updateMs+" ms/punt).");
+}
+function applyLiveGeneratorRange(){
+  if(!fg.running)return;
+  const mn=parseFloat($("fgMin").value),mx=parseFloat($("fgMax").value);
+  const inLimits=(!activeOutTest||((activeOutTest.min===undefined||mn>=activeOutTest.min)&&(activeOutTest.max===undefined||mx<=activeOutTest.max)));
+  if(isFinite(mn)&&isFinite(mx)&&mn<mx&&inLimits){fg.min=mn;fg.max=mx;}
+}
+$("fgMin").addEventListener("input",applyLiveGeneratorRange);
+$("fgMax").addEventListener("input",applyLiveGeneratorRange);
+$("fgPeriod").addEventListener("input",syncPointsToPeriod);
+$("fgSteps").addEventListener("input",syncPeriodToPoints);
+$("pollInterval").addEventListener("change",syncPointsToPeriod);
+$("outSend").onclick=async()=>{
+  if(!activeOutTest){alert(tr("sel_out"));return;}
+  const val=parseFloat($("outSet").value);
+  if(!isFinite(val)){alert(tr("value_ph"));return;}
+  if((activeOutTest.min!==undefined&&val<activeOutTest.min)||(activeOutTest.max!==undefined&&val>activeOutTest.max)){alert(`Waarde moet tussen ${activeOutTest.min} en ${activeOutTest.max} ${activeOutTest.unit} liggen.`);return;}
+  try{await dev.setOutputEnabled(true);
+    await dev.setOutputValue(val,activeOutTest);updateOutControls();
+    log(tr("out_sent",val,activeOutTest.unit));}
+  catch(e){log(tr("out_send_fail",e.message),"warn");}
+};
+function fgWaveValue(wave,frac,mn,mx,steps,dir){
+  const span=mx-mn;let f;
+  switch(wave){
+    case"sine":f=0.5-0.5*Math.cos(2*Math.PI*frac);break;
+    case"triangle":f=frac<0.5?2*frac:2*(1-frac);break;
+    case"sawtooth":f=frac;break;
+    case"square":f=frac<0.5?1:0;break;
+    case"staircase":{const n=Math.max(2,steps|0);f=Math.min(1,Math.floor(frac*n)/(n-1));if(dir==="down")f=1-f;break;}
+    default:f=frac;
+  }
+  return mn+span*f;
+}
+function fgStartFraction(wave,val,mn,mx,steps,dir){
+  const n=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
+  if(wave==="sine")return Math.acos(1-2*n)/(2*Math.PI);
+  if(wave==="triangle")return n/2;
+  if(wave==="square")return n>=.5?0:.5;
+  if(wave==="staircase"){const count=Math.max(2,steps|0),f=dir==="down"?1-n:n;return Math.round(f*(count-1))/count;}
+  return wave==="ramp"&&dir==="down"?1-n:n;
+}
+async function fgStep(){
+  const t=activeOutTest;if(!t)return {done:true,val:0};
+  const el=(performance.now()-fg.t0)/1000,period=fg.period>0?fg.period:1;
+  let val,finished=false;
+  if(fg.wave==="ramp"){
+    const cyc=Math.floor(el/period),cycleDone=fg.cycles>0&&cyc>=fg.cycles;
+    const f0=cycleDone?1:(el/period)%1,f=fg.dir==="down"?1-f0:f0;
+    val=fg.min+(fg.max-fg.min)*f;fg.cyc=cyc;finished=cycleDone;
+  }
+  else{const cyc=Math.floor(el/period);
+    if(fg.cycles>0&&cyc>=fg.cycles){val=fgWaveValue(fg.wave,0,fg.min,fg.max,fg.steps,fg.dir);finished=true;}
+    else{val=fgWaveValue(fg.wave,(el/period)%1,fg.min,fg.max,fg.steps,fg.dir);}
+    fg.cyc=cyc;}
+  await dev.setOutputValueOnly(val,t,fg.blind);
+  fg.errors=0;fg.lastVal=val;$("outSet").value=Number(val.toFixed(3));
+  $("fgInfo").textContent=val.toFixed(3)+" "+t.unit+" \u00b7 "+fg.steps+" pt/cyclus"+(fg.cycles>0?(" \u00b7 cyclus "+Math.min(fg.cyc+1,fg.cycles)+"/"+fg.cycles):"");
+  return {done:finished,val};
+}
+$("fgStart").onclick=async()=>{
+  if(!activeOutTest){alert(tr("sel_out"));return;}
+  const mn=parseFloat($("fgMin").value),mx=parseFloat($("fgMax").value);let per=parseFloat($("fgPeriod").value);
+  if(!isFinite(mn)||!isFinite(mx)||mn===mx){alert("Min/Max ongeldig.");return;}
+  if(mn>mx){alert("Min moet kleiner zijn dan max.");return;}
+  if((activeOutTest.min!==undefined&&mn<activeOutTest.min)||(activeOutTest.max!==undefined&&mx>activeOutTest.max)){alert(`Generatorbereik moet binnen ${activeOutTest.min}–${activeOutTest.max} ${activeOutTest.unit} liggen.`);return;}
+  if(!(per>0)){alert("Periode moet groter dan 0 zijn.");return;}
+  const blind=$("fgBlind").checked,steps=Math.max(2,parseInt($("fgSteps").value)||5);
+  // Gemeten SG-004A-doorlooptijd: circa 0,75 s per read/write. Met actieve ingang zijn er twee transacties per punt.
+  const commFloor=dev.simulate?50:(activeInTest?1550:800);
+  let updateMs=Math.max(parseInt($("pollInterval").value)||500,commFloor);
+  if(parseInt($("pollInterval").value)<commFloor){$("pollInterval").value=commFloor;log("Meetinterval aangepast aan communicatie: "+commFloor+" ms.","warn");}
+  const minPeriod=steps*updateMs/1000;
+  if(per<minPeriod){per=Math.ceil(minPeriod*10)/10;$("fgPeriod").value=per;
+    log("Generatorperiode aangepast: "+steps+" punten × "+updateMs+" ms = minimaal "+per+" s.","warn");}
+  fg.wave=$("fgWave").value;fg.min=mn;fg.max=mx;fg.period=per;fg.dir=$("fgDir").value;fg.blind=blind;
+  fg.cycles=Math.max(0,parseInt($("fgCycles").value)||0);fg.steps=steps;
+  const requestedStart=parseFloat($("outSet").value),startVal=isFinite(requestedStart)?Math.max(mn,Math.min(mx,requestedStart)):mn;
+  const startFrac=fgStartFraction(fg.wave,startVal,mn,mx,fg.steps,fg.dir);
+  fg.cyc=0;fg.errors=0;fg.lastVal=startVal;$("outSet").value=Number(startVal.toFixed(3));
+  try{await dev.setOutputEnabled(true);$("outOff").disabled=false;fg.t0=performance.now()-startFrac*per*1000;fg.running=true;}
+  catch(e){log(tr("out_send_fail",e.message),"warn");fg.running=false;updateOutControls();return;}
+  const dirTxt=(fg.wave==="ramp"||fg.wave==="staircase")?(", "+(fg.dir==="down"?tr("down"):tr("up"))):"";
+  log(tr("fg_started")+" "+fg.wave+" "+mn+"\u2192"+mx+" "+activeOutTest.unit+", periode "+per+"s"+(fg.cycles?(", "+fg.cycles+" cycli"):", continu")+dirTxt+(fg.blind?" — blind":""));
+  updateOutControls();
+};
+function stopFg(reason){
+  if(!fg.running)return;fg.running=false;$("fgInfo").textContent="";
+  if(Number.isFinite(fg.lastVal))$("outSet").value=Number(fg.lastVal.toFixed(3));
+  log(tr("fg_stopped")+(reason?(" ("+tr(reason)+")"):"")+".");updateOutControls();
+}
+$("fgStop").onclick=()=>stopFg("fg_manual");
+
+async function selectTest(t,side){
+  if(!dev.connected){alert(tr("not_connected"));return;}
+  if(recording){alert("Stop eerst de opname.");return;}
+  stopPoll();
+  const isOut=t.dir==="out";
+  if(isOut&&fg.running)stopFg("fg_other_test");
+  if(isOut)activeOutTest=t;else activeInTest=t;
+  trend.length=0;
+  if(isOut)syncOutputControls(t); else syncInputControls(t);
+  const sigName={0x01:"CURRENT",0x02:"VOLTAGE",0x03:"FREQUENCY",0x04:"MILLIVOLT",0x05:"RESISTANCE"};
+  log(tr("sel_side",side,t.name,sigName[t.sig]||"0x"+t.sig.toString(16),t.sub||0));
+  try{
+    if(isOut){
+      log(tr("sel_out_type",sigName[t.sig]||"0x"+t.sig.toString(16),t.sub||0));
+      await dev.setOutputType(t.sig,t.sub||0);await dev.setOutputEnabled(true);$("outOff").disabled=false;
+      if(!dev.simulate){const ck=await dev.readU16(REG_OUTPUT_SIGNAL);
+        log(tr("sel_readback",ck.toString(16),((t.sig<<8)|(t.sub||0)).toString(16)));
+        if(((ck>>8)&0xFF)!==t.sig)log(tr("out_sig_warn",ck.toString(16)),"warn");
+        else if((ck&0xFF)!==(t.sub||0))log(tr("out_sub_warn",(ck&0xFF).toString(16),(t.sub||0).toString(16)),"warn");}
+    }else{
+      log(tr("sel_in_type",sigName[t.sig]||"0x"+t.sig.toString(16),t.sub||0));
+      await dev.setInputType(t.sig,t.sub||0);
+      if(!dev.simulate){const ck=await dev.readU16(REG_INPUT_SIGNAL);
+        log("  → readback input-signaal = 0x"+ck.toString(16)+" (verwacht: 0x"+((t.sig<<8)|(t.sub||0)).toString(16)+")");
+        if(((ck>>8)&0xFF)!==t.sig)log(tr("sig_readback",ck.toString(16)),"warn");
+        else if((ck&0xFF)!==(t.sub||0))log(tr("sig_sub_warn",(ck&0xFF).toString(16),(t.sub||0).toString(16)),"warn");}
+    }}
+  catch(e){log(tr("sig_write",e.message),"warn");}
+  const prefix=isOut?"out":"in";
+  $(prefix+"Name").textContent=t.name;$(prefix+"Unit").textContent=" "+t.unit;
+  $(prefix+"Scale").value=(t.scale!==undefined?t.scale:1);$(prefix+"Scale").disabled=false;
+  if(isOut)applyGeneratorRange(t);
+  $("record").disabled=!(activeInTest||activeOutTest);
+  log(tr("sel_active",side,t.name));
+  updateOutControls();
+  if(!document.querySelector(".tab-btn[data-tab=regs]").classList.contains("active")){await sleep(100);startPoll();}}
+
+function stopRecording(){
+  if(!recording)return;recording=false;
+  $("record").textContent="\u25CF "+tr("rec_start");$("record").classList.remove("active");
+  $("save").disabled=false;const n=session?session.samples.length:0;
+  log(tr("recording_stopped",n));}
+
+$("record").onclick=()=>{if(!activeInTest&&!activeOutTest)return;
+  if(recording){stopRecording();return;}
+  session={kks:$("kks").value,operator:$("operator").value,notes:$("notes").value,inTest:activeInTest,outTest:activeOutTest,started:new Date(),samples:[]};
+  recording=true;startTime=performance.now();$("record").textContent="\u25A0 "+tr("rec_stop");$("record").classList.add("active");
+  $("save").disabled=true;log(tr("recording",$("kks").value||""));};
+
+$("save").onclick=()=>{if(!session||!session.samples.length){alert(tr("no_data"));return;}
+  if(!$("kks").value.trim()&&!confirm(tr("kks_empty_warn")))return;
+  try{
+    session.kks=$("kks").value;const csv=buildCsv(session);const fn=fileName(session);
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=fn;a.style.display="none";
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+    log(tr("saved",fn));
+  }catch(e){log(tr("save_fail",e.message),"warn");alert(tr("save_fail",e.message));}};
+
+$("outOff").onclick=async()=>{try{
+  const enable=!dev._outOn;if(!enable&&fg.running)stopFg("fg_output");
+  await dev.setOutputEnabled(enable);updateOutControls();
+  log(tr(enable?"out_enabled":"out_disabled"));
+  }catch(e){log(tr("out_disable_fail",e.message),"warn");}};
+
+function safe(s){return (s.trim()||"GEEN_KKS").replace(/[^A-Za-z0-9._-]+/g,"-");}
+function pad(n){return String(n).padStart(2,"0");}
+function fileName(s){const d=s.started;
+  const ts=`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  const op=s.operator? "_"+safe(s.operator):"";
+  const keyPart=s.inTest&&s.outTest?"in_"+s.inTest.key+"_out_"+s.outTest.key:(s.inTest||s.outTest).key;
+  return `${safe(s.kks)}${op}_${keyPart}_${ts}.csv`;}
+function buildCsv(s){const vals=s.samples.flatMap(x=>[x.inValue,x.outValue].filter(v=>v!==null));
+  const fmt=n=>n.toFixed(4).replace(".",","), fmt3=n=>n.toFixed(3).replace(".",",");
+  const mn=vals.length?Math.min(...vals):0,mx=vals.length?Math.max(...vals):0,avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+  const d=s.started;
+  const D=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,T=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const inHeader=s.inTest?tr("csv_in_val")+" ("+s.inTest.unit+");"+tr("csv_in_range"):";";
+  const outHeader=s.outTest?tr("csv_out_val")+" ("+s.outTest.unit+");"+tr("csv_out_range"):";";
+  const L=["# "+tr("csv_report"),"# "+tr("csv_tool",APP_VERSION,APP_AUTHOR),"# "+tr("csv_kks")+";"+s.kks,
+    (s.inTest?"# "+tr("csv_input")+";"+s.inTest.name+" ("+s.inTest.key+") "+s.inTest.unit:""),
+    (s.outTest?"# "+tr("csv_output")+";"+s.outTest.name+" ("+s.outTest.key+") "+s.outTest.unit:""),
+    "# "+tr("csv_operator")+";"+s.operator,"# "+tr("csv_notes")+";"+s.notes,"# "+tr("csv_startdate")+";"+D,"# "+tr("csv_starttime")+";"+T,
+    "# "+tr("csv_samples")+";"+s.samples.length,
+    (vals.length?"# "+tr("csv_min")+";"+fmt(mn)+" # "+tr("csv_max")+";"+fmt(mx)+" # "+tr("csv_avg")+";"+fmt(avg):""),
+    "",tr("csv_t_sec")+";"+tr("csv_timestamp")+";"+inHeader+";"+outHeader];
+  for(const x of s.samples){
+    const inV=x.inValue!==null?fmt(x.inValue):"";
+    const inR=x.inRange===null?"":(x.inRange?tr("csv_yes"):tr("csv_no"));
+    const outV=x.outValue!==null?fmt(x.outValue):"";
+    const outR=x.outRange===null?"":(x.outRange?tr("csv_yes"):tr("csv_no"));
+    L.push(`${fmt3(x.t_sec)};${x.ts};${inV};${inR};${outV};${outR}`);}
+  return "\uFEFF"+L.join("\r\n");}
+
+function findTestBySig(sigVal,dir){
+  let t=TESTS.find(t=>t.dir===dir&&((t.sig<<8)|(t.sub||0))===sigVal);
+  if(!t)t=TESTS.find(t=>t.dir===dir&&t.sig===((sigVal>>8)&0xFF));
+  return t||null;}
+function _applyFollow(t,side){
+  const isOut=side==="out";
+  if(isOut)activeOutTest=t;else activeInTest=t;
+  trend.length=0;
+  if(isOut){syncOutputControls(t);applyGeneratorRange(t);}else syncInputControls(t);
+  const p=isOut?"out":"in";
+  $(p+"Name").textContent=t.name;
+  $(p+"Readout").innerHTML='<small id="'+p+'Unit"> '+t.unit+'</small>';
+  $("record").disabled=!(activeInTest||activeOutTest);
+  log(tr("follow",side,t.name));}
+function startPoll(){stopPoll();tick();}
+function stopPoll(){if(pollTimer){clearTimeout(pollTimer);pollTimer=null;}}
+let _pc=0,_combinedOk=true;
+async function tick(){const tickStarted=performance.now(),interval=parseInt($("pollInterval").value)||500;
+  if(dev.connected&&(activeInTest||activeOutTest)){
+    const tickTs=(performance.now()-startTime)/1000;
+    const d=new Date();
+    const tickTsStr=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3,"0")}`;
+    if(fg.running){
+      // FG modus: ingang uitlezen, setpoint uit fgStep gebruiken
+      if(activeInTest){try{const v=await dev.readInputValue();updateValue(v,activeInTest,"in",tickTs,tickTsStr);}catch(e){log(tr("read_fail",e.message),"warn");}}
+      try{const r=await fgStep();
+        if(r.done)stopFg("fg_done");
+        if(activeOutTest){const raw=r.val/(activeOutTest.scale||1);
+          updateValue(raw,activeOutTest,"out",tickTs,tickTsStr);}
+      }catch(e){fg.errors++;log(tr("out_send_fail",e.message)+` (${fg.errors}/3)`,"warn");
+        if(fg.errors>=3)stopFg("fg_conn_lost");}
+    }else if(activeInTest&&activeOutTest&&_combinedOk&&!dev.simulate){
+      try{const b=await dev.readBothValues();
+        updateValue(b.in,activeInTest,"in",tickTs,tickTsStr);
+        updateValue(b.out,activeOutTest,"out",tickTs,tickTsStr);}
+      catch(e){_combinedOk=false;log(tr("combined_fail",e.message));}}
+    if(!fg.running&&(!activeInTest||!activeOutTest||!_combinedOk||dev.simulate)){
+      if(activeInTest){
+        try{const v=await dev.readInputValue();updateValue(v,activeInTest,"in",tickTs,tickTsStr);}
+        catch(e){log(tr("read_fail",e.message),"warn");}
+      }
+      if(activeOutTest){
+        try{const v=await dev.readOutputValue();updateValue(v,activeOutTest,"out",tickTs,tickTsStr);}
+        catch(e){log(tr("out_read_fail",e.message),"warn");}
+      }
+    }
+    // sync-check alleen als FG niet draait
+    if(!dev.simulate&&!fg.running&&++_pc%5===0){
+      try{
+        const gotIn=await dev.readU16(REG_INPUT_SIGNAL);
+        const swIn=$("inSyncWarn");
+        if(!activeInTest||(gotIn>>8)!==activeInTest.sig){
+          const mt=findTestBySig(gotIn,"in");
+          if(mt){_applyFollow(mt,"in");swIn.textContent="";swIn.className="sync-warn";}
+          else swIn.textContent=tr("sig_mismatch",gotIn.toString(16));}
+        else if(activeInTest.sub!==undefined&&gotIn!==((activeInTest.sig<<8)|(activeInTest.sub|0))){
+          swIn.textContent=tr("sub_mismatch",(gotIn&0xFF).toString(16),activeInTest.sub.toString(16));swIn.className="sync-warn";}
+        else{swIn.textContent="";swIn.className="sync-warn";}
+      }catch(e){}
+      try{
+        const gotOut=await dev.readU16(REG_OUTPUT_SIGNAL);
+        const swOut=$("outSyncWarn");
+        if(!activeOutTest||(gotOut>>8)!==activeOutTest.sig){
+          const mt=findTestBySig(gotOut,"out");
+          if(mt){_applyFollow(mt,"out");swOut.textContent="";swOut.className="sync-warn";}
+          else swOut.textContent=tr("sig_mismatch",gotOut.toString(16));}
+        else if(activeOutTest.sub!==undefined&&gotOut!==((activeOutTest.sig<<8)|(activeOutTest.sub|0))){
+          swOut.textContent=tr("sub_mismatch",(gotOut&0xFF).toString(16),activeOutTest.sub.toString(16));swOut.className="sync-warn";}
+        else{swOut.textContent="";swOut.className="sync-warn";}
+      }catch(e){}
+    }
+  }
+  const elapsed=performance.now()-tickStarted;
+  pollTimer=setTimeout(tick,Math.max(0,Math.min(60000,Math.max(50,interval))-elapsed));}
+function inRange(t,v){if(t.min===undefined||t.max===undefined)return null;return v>=t.min&&v<=t.max;}
+function updateValue(v,t,side,tickTs,tickTsStr){const vv=t.scale&&!dev.simulate?v*t.scale:v;const vc=t.convert?t.convert(vv):vv;
+  const prefix=side==="out"?"out":"in";
+  const rawEl=$(prefix+"Raw");if(rawEl)rawEl.textContent=(typeof v==="number")?("raw "+v.toFixed(3)):"";
+  $(prefix+"Readout").innerHTML=vc.toFixed(3)+'<small id="'+prefix+'Unit"> '+t.unit+'</small>';
+  const ok=inRange(t,vc),vd=$(prefix+"Verdict");
+  if(ok===null){vd.className="verdict none";vd.textContent=tr("v_no_range");}
+  else if(ok){vd.className="verdict ok";vd.textContent="\u2714 "+tr("v_in_range");}
+  else{vd.className="verdict fail";vd.textContent="\u2718 "+tr("v_out_range");}
+  trend.push({v:vc,side:prefix,ts:performance.now()});if(trend.length>400)trend.shift();drawTrend();
+  if(recording&&session){
+    const last=session.samples[session.samples.length-1];
+    if(last&&last.t_sec===tickTs){
+      if(prefix==="in"){last.inValue=vc;last.inRange=ok;last.inUnit=t.unit;}
+      else{last.outValue=vc;last.outRange=ok;last.outUnit=t.unit;}
+    }else{
+      const sample={t_sec:tickTs,ts:tickTsStr,inValue:null,inRange:null,inUnit:null,outValue:null,outRange:null,outUnit:null};
+      if(prefix==="in"){sample.inValue=vc;sample.inRange=ok;sample.inUnit=t.unit;}
+      else{sample.outValue=vc;sample.outRange=ok;sample.outUnit=t.unit;}
+      session.samples.push(sample);
+    }
+    $("samples").textContent=session.samples.length+" "+tr("samples");}}
+
+const cv=$("trend"),ctx=cv.getContext("2d");
+function drawTrend(){try{
+  const dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
+  if(!W||!H)return;
+  if(cv.width!==W*dpr){cv.width=W*dpr;cv.height=H*dpr;}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  const inPts=trend.filter(p=>p&&p.side==="in").map(p=>p.v).filter(v=>typeof v==="number");
+  const outPts=trend.filter(p=>p&&p.side==="out").map(p=>p.v).filter(v=>typeof v==="number");
+  if(inPts.length<2&&outPts.length<2)return;
+  const loIn=inPts.length?Math.min(...inPts):0,hiIn=inPts.length?Math.max(...inPts):1;
+  const loOut=outPts.length?Math.min(...outPts):0,hiOut=outPts.length?Math.max(...outPts):1;
+  const rngIn=hiIn-loIn<1e-9?1:hiIn-loIn, rngOut=hiOut-loOut<1e-9?1:hiOut-loOut;
+  const padL=42, padR=42;
+  const plotW=W-padL-padR, plotH=H-10;
+
+  // gridlines (gebruik linker-as voor posities)
+  ctx.strokeStyle="#1c222b";ctx.lineWidth=1;ctx.setLineDash([3,4]);
+  ctx.font="10px ui-monospace,monospace";
+  for(let g=0;g<=4;g++){
+    const y=5+(1-g/4)*plotH;
+    ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();
+    // linkerlabel (ingang)
+    const lblIn=(loIn+rngIn*(g/4)).toFixed(3);
+    ctx.fillStyle="#3fd0c9";
+    ctx.textAlign="right";
+    ctx.fillText(lblIn,padL-4,g<2?y+4:y+4);
+    // rechterlabel (uitgang)
+    const lblOut=(loOut+rngOut*(g/4)).toFixed(3);
+    ctx.fillStyle="#ffc83d";
+    ctx.textAlign="left";
+    ctx.fillText(lblOut,W-padR+4,g<2?y+4:y+4);
+  }
+  ctx.setLineDash([]);
+  ctx.textAlign="left";
+
+  function drawLine(pts,lo,rng,color){
+    if(pts.length<2)return;
+    ctx.beginPath();pts.forEach((v,i)=>{
+      const x=padL+i/(pts.length-1)*plotW;
+      const y=5+(1-(v-lo)/rng)*plotH;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
+  }
+  drawLine(inPts,loIn,rngIn,"#3fd0c9");
+  drawLine(outPts,loOut,rngOut,"#ffc83d");
+
+  // legenda
+  ctx.fillStyle="#3fd0c9";ctx.font="bold 10px ui-monospace,monospace";
+  ctx.fillText("IN"+(activeInTest?" "+activeInTest.unit:""),padL,14);
+  ctx.fillStyle="#ffc83d";
+  ctx.fillText("UIT"+(activeOutTest?" "+activeOutTest.unit:""),padL+60,14);
+}catch(e){console.warn("drawTrend:",e);}}
+window.addEventListener("resize",()=>{drawTrend();scheduleMeasurementAlignment();});
+document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT")return;
+  if(e.code==="Space"){e.preventDefault();if(!$("record").disabled)$("record").click();}});
+
+// ─── registerweergave ───
+const REGS=[
+  {addr:0x9C41,name:"Firmware-versie",fmt:"u16"},
+  {addr:0x9C42,name:"Ingangssignaaltype",fmt:"u16"},
+  {addr:0x9C43,name:"Uitgangssignaaltype",fmt:"u16"},
+  {addr:0x9C44,name:"Ingangswaarde (float)",fmt:"float"},
+  {addr:0x9C46,name:"Uitgangswaarde (float)",fmt:"float"},
+  {addr:0x9C48,name:"Uitgangsschakelaar",fmt:"u16"},
+  {addr:0x9C49,name:"Cal 49",fmt:"u16"},
+  {addr:0x9C4A,name:"Cal 4A",fmt:"u16"},
+  {addr:0x9C4C,name:"Cal 4C",fmt:"u16"},
+  {addr:0x9C4D,name:"Cal 4D",fmt:"u16"},
+  {addr:0x9C4E,name:"Cal 4E",fmt:"u16"},
+];
+const _sigLabels={0x01:"CURRENT",0x02:"VOLTAGE",0x03:"FREQUENCY",0x04:"MILLIVOLT",0x05:"RESISTANCE"};
+const regGrid=$("regGrid");
+REGS.forEach(r=>{
+  const c=document.createElement("div");c.className="reg-card";
+  c.innerHTML=`<div class="r-addr">0x${r.addr.toString(16).toUpperCase()}</div>
+    <div class="r-name">${r.name}</div><div class="r-val" id="rv-${r.addr.toString(16)}">— <small>?</small></div>`;
+  regGrid.appendChild(c);});
+let _regTimer=null,_regBusy=false;
+async function updateRegs(){
+  if(!dev.connected){$("regsStatus").textContent="\u2014 "+tr("not_connected");return;}
+  if(_regBusy)return;
+  _regBusy=true;
+  try{
+    for(const r of REGS){
+      const el=$("rv-"+r.addr.toString(16));if(!el)continue;
+      try{let v;
+        if(dev.simulate){
+          if(r.fmt==="float"){const f=dev._simFloat(r.addr);v=f.value.toFixed(4)+" <small>(sim)</small>";}
+          else{v=dev._simU16(r.addr);
+            const sig=(v>>8)&0xFF,sigLbl=_sigLabels[sig];
+            v=v+" (0x"+v.toString(16).toUpperCase()+")"+(sigLbl?" ["+sigLbl+"]":"")+" <small>(sim)</small>";}
+        }else{
+          if(r.fmt==="float"){const f=await dev.readFloat(r.addr);v=f.value.toFixed(4)+" <small>"+hx(f.raw)+"</small>";}
+          else{v=await dev.readU16(r.addr);
+          const sig=(v>>8)&0xFF,sub=v&0xFF,sigLbl=_sigLabels[sig];
+          let extra=sigLbl?" ["+sigLbl:"";
+          if(sig===0x04&&sub){ // MILLIVOLT — toon TC-type en mode
+            const tc="SBEKRJTN"[(sub>>4)-1]||"?";const mode=sub&0xF;
+            extra+=" TC-"+tc+" m="+mode;}
+          if(sig===0x05&&sub){ // RESISTANCE — toon RTD-type
+            const rtd=["?","Pt100","Cu50","RES","Pt1000"][sub]||"?";
+            extra+=" "+rtd;}
+          extra+=sigLbl?"]":"";
+            v=v+" (0x"+v.toString(16).toUpperCase()+")"+extra+" <small>uint16</small>";}}
+        el.innerHTML=v;
+      }catch(e){el.textContent="fout — "+e.message;el.style.color="var(--fail)";}}
+  }finally{_regBusy=false;}
+  $("regsStatus").textContent="↻ "+new Date().toLocaleTimeString();}
+
+// tabbladen — schakel poll vs regs uit om seriële conflicten te voorkomen
+for(const btn of document.querySelectorAll(".tab-btn")){
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".tab-btn").forEach(b=>b.setAttribute("aria-selected","false"));
+    document.querySelectorAll(".tab-pane").forEach(p=>{p.classList.remove("active");p.hidden=true;});
+    btn.classList.add("active");btn.setAttribute("aria-selected","true");
+    const pane=document.getElementById("tab-"+btn.dataset.tab);
+    if(pane){pane.classList.add("active");pane.hidden=false;}
+    if(btn.dataset.tab==="regs"){
+      stopPoll(); // poll stopt — regs gebruikt de poort
+      if(!_regTimer){updateRegs();_regTimer=setInterval(updateRegs,2000);}
+    }else{
+      if(_regTimer){clearInterval(_regTimer);_regTimer=null;}
+      if(!pollTimer&&dev.connected)startPoll(); // poll hervatten
+    }
+    setTimeout(drawTrend,50);});}
+
+// firmware + initiële device-status bij verbinden
+const _origOnState=dev.onState;
+dev.onState=async(connected,msg)=>{
+  if(connected){
+    try{const fw=await dev.readFirmware();
+      const bcd=fw&0xFF,maj=(bcd>>4)&0xF,min=bcd&0xF;
+      $("fwDisplay").textContent="v"+maj+"."+min;
+      log("Firmware v"+maj+"."+min);
+    }catch(e){$("fwDisplay").textContent=tr("fw_unknown");}
+    // De SG-004A ondersteunt deze twee configuratieregisters betrouwbaarder als losse reads.
+    try{const gotIn=await dev.readU16Retry(REG_INPUT_SIGNAL),mt=findTestBySig(gotIn,"in");
+      if(mt){_applyFollow(mt,"in");log("Ingang overgenomen: 0x"+gotIn.toString(16).toUpperCase()+" — "+mt.name);}
+      else log("Ingangstype 0x"+gotIn.toString(16).toUpperCase()+" past op geen test","warn");
+    }catch(e){log("Ingangsinstelling lezen mislukt: "+e.message,"warn");}
+    let startupOutTest=null;
+    try{const gotOut=await dev.readU16Retry(REG_OUTPUT_SIGNAL),mt=findTestBySig(gotOut,"out");
+      if(mt){startupOutTest=mt;_applyFollow(mt,"out");log("Uitgang overgenomen: 0x"+gotOut.toString(16).toUpperCase()+" — "+mt.name);}
+      else log("Uitgangstype 0x"+gotOut.toString(16).toUpperCase()+" past op geen test","warn");
+    }catch(e){log("Uitgangsinstelling lezen mislukt: "+e.message,"warn");}
+    try{if(startupOutTest){const r=await dev.readFloatRetry(REG_OUTPUT_VALUE),raw=typeof r==="number"?r:r.value;
+      const scale=startupOutTest.scaleW||startupOutTest.scale||1;
+      const setpoint=dev.simulate?raw:raw*scale;
+      $("outSet").value=Number(setpoint.toFixed(3));fg.lastVal=setpoint;
+      log("Uitgangssetpoint overgenomen: "+Number(setpoint.toFixed(3))+" "+startupOutTest.unit);}}
+    catch(e){log("Uitgangssetpoint lezen mislukt: "+e.message,"warn");}
+    try{const sw=await dev.readU16Retry(REG_OUTPUT_SWITCH);dev._outOn=sw===0x0102||sw===1;$("outOff").disabled=!dev._outOn;}
+    catch(e){log("Uitgangsstatus lezen mislukt: "+e.message,"warn");}
+  }
+  if(_origOnState)_origOnState(connected,msg);};
+
+log(tr("init_log",APP_VERSION,APP_AUTHOR,APP_DATE));
+log(tr("ready"));
+if(!("serial" in navigator))log(tr("no_serial"),"warn");
+applyLang();
+</script>
+</body>
+</html>
