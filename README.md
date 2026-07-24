@@ -4,6 +4,8 @@ A browser-based Modbus test tool for the **FNIRSI SG-004A**, created by Bert Sch
 
 The application communicates directly with the SG-004A through the Web Serial API. No installation or separate server is required.
 
+Keywords: SG-004A, FNIRSI SG-004A, signal generator, function generator, signal calibrator, process calibrator, Modbus, Web Serial, 4-20 mA, 4-20mA, 0-10 V, 0-10V, current loop, voltage input, voltage output, tester, diagnostics and CSV logging.
+
 ## Live application
 
 [Open the SG-004A Test Tool](https://Bsc1967.github.io/sg004a-testtool/)
