@@ -10,6 +10,8 @@ Keywords: SG-004A, FNIRSI SG-004A, signal generator, function generator, signal 
 
 [Open the SG-004A Test Tool](https://Bsc1967.github.io/sg004a-testtool/)
 
+![SG-004A Test Tool screenshot](docs/screenshot-main.png)
+
 ## Features
 
 - Measure input and output values
